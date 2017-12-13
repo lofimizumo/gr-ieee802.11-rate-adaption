@@ -17,6 +17,7 @@
 #include <ieee802-11/mapper.h>
 #include "utils.h"
 #include <gnuradio/io_signature.h>
+#include <boost/crc.hpp>
 
 using namespace gr::ieee802_11;
 
@@ -78,7 +79,26 @@ int general_work(int noutput, gr_vector_int& ninput_items,
 			gr::thread::scoped_lock lock(d_mutex);
 
 			int psdu_length = pmt::blob_length(pmt::cdr(msg));
-			const char *psdu = static_cast<const char*>(pmt::blob_data(pmt::cdr(msg)));
+
+			// check if crc was already included
+			pmt::pmt_t crc_included = pmt::dict_ref(pmt::car(msg), pmt::mp("crc_included"), pmt::PMT_T);
+			if (pmt::eq(crc_included, pmt::PMT_F)) {
+				dout << "FCS is not included, append 4 bytes here in block mapper" << std::endl;
+				psdu_length += 4;	// Added
+			}
+
+			const char *psdu = (char *) calloc(psdu_length, sizeof(char));
+			psdu = static_cast<const char *>(pmt::blob_data(pmt::cdr(msg)));
+
+			// Append FCS (CRC) if its not included
+			if (pmt::eq(crc_included, pmt::PMT_F)) {
+				// compute and store fcs
+				boost::crc_32_type result;
+				result.process_bytes(psdu, psdu_length - 4);
+
+				uint32_t fcs = result.checksum();
+				memcpy((char *) psdu + psdu_length - 4, &fcs, sizeof(uint32_t));
+            }
 
 			// ############ INSERT MAC STUFF
 			frame_param frame(d_ofdm, psdu_length);
