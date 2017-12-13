@@ -1,196 +1,79 @@
-Hi!
+Greetings,
 
-This an IEEE 802.11 a/g/p transceiver for GNU Radio that is fitted for operation with Ettus N210s and B210s. Interoperability was tested with many off-the-shelf WiFi cards and IEEE 802.11p prototypes. The code can also be used in simulations.
+This project implements the complete IEEE802.11 protocol, including PHY, MAC, and rate adaptation approaches upon GNURadio/USRP software-defined radio platform. The project integrates the existing open-source projects (See literature [2,3]) and makes them a unity that works under the latest GNURadio platform. In addition, mainstream rate adaptation approaches Minstrel and Adaptive Auto Rate Fallback (AARF) are implemented. The rate adaptation module continuously collects the data transmission status, i.e, whether acknowledgement frames are received after data transmission, and decides the next data transmission rate to be used according to such statistics. The new data rate is then being transferred to the PHY module and applied in the subsequent frame encoding and modulation.
+ 
+To use this project, please cite the following literatures:
 
+[1] Implementation of rate adaptation approach and complete system integration
 
-# Development
+@inproceedings{lu2016scheduling,
+  title={Scheduling Dynamic Wireless Networks with Limited Operations},
+  author={Haoyang Lu and Wei Gao},
+  booktitle={IEEE International Conference on Network Protocols},
+  year={2016},
+  organization={IEEE}
+}
 
-Like GNU Radio, this module uses *master* and *next* branches for development, which are supposed to be used with the corresponding GNU Radio branches.
-I recommend staying up-to-date by using the *next* branch.
+[2] The PHY implementation is based on (https://github.com/bastibl/gr-ieee802-11/)
+
+@inproceedings{bloessl2013ieee,
+  title={An IEEE 802.11 a/g/p OFDM Receiver for GNU Radio},
+  author={Bloessl, Bastian and Segata, Michele and Sommer, Christoph and Dressler, Falko},
+  booktitle={Proceedings of the second workshop on Software radio implementation forum},
+  pages={9--16},
+  year={2013},
+  organization={ACM}
+}
+
+[3] The MAC implementation is based on (http://www.uwicore.umh.es/mhop-software.html)
+
+@inproceedings{gutierrez2010ieee,
+  title={An IEEE 802.11 MAC Software Defined Radio implementation for experimental wireless communications and networking research},
+  author={Gutierrez-Agullo, Juan R and Coll-Perales, Baldomero and Gozalvez, Javier},
+  booktitle={Wireless Days (WD), 2010 IFIP},
+  pages={1--5},
+  year={2010},
+  organization={IEEE}
+}
 
 # Installation
+Please go through [[2]](https://github.com/bastibl/gr-ieee802-11/) for installation and settings.
 
+The software is tested on Ubuntu 16.04 and GNU Radio Companion 3.7.11.1. To check your GNURadio version, use
 
-## Dependencies
-
-Please note that ```apt-get``` is the package manager of Debian/Ubuntu based systems, while ```port``` is one package manager for OSX. So use either (not both) according to your needs.
-
-### Swig
-
-Swig is required to create the python bindings.
-
-    sudo apt-get install swig
-    sudo port install swig
-
-
-### log4cpp
-
-I use the new [logging feature](http://gnuradio.org/doc/doxygen/page_logger.html) of GNU Radio which relies on log4cpp. This should be an optional dependency some day, but currently it is required. You can install it with
-
-    sudo apt-get install liblog4cpp5-dev
-    sudo port install log4cpp
-
-
-### GNU Radio v3.7
-
-You need at least version 3.7.3.
-
-There are several ways to install GNU Radio. You can use
-
-- [pybombs](http://gnuradio.org/redmine/projects/pybombs/wiki)
-- [pre-combiled binaries](http://gnuradio.org/redmine/projects/gnuradio/wiki/BinaryPackages)
-- [from source](http://gnuradio.org/redmine/projects/gnuradio/wiki/InstallingGRFromSource)
-
-
-### gr-foo
-
-I have some non project specific GNU Radio blocks in my gr-foo repo that are needed. For example the Wireshark connector. You can find these blocks at [https://github.com/bastibl/gr-foo](https://github.com/bastibl/gr-foo). They are installed with the typical command sequence:
-
-    git clone https://github.com/bastibl/gr-foo.git
-    cd gr-foo
-    mkdir build
-    cd build
-    cmake ..
-    make
-    sudo make install
-    sudo ldconfig
-
-
-## Installation of gr-ieee802-11
-
-To actually install the blocks do
-
-    git clone git://github.com/bastibl/gr-ieee802-11.git
-    cd gr-ieee802-11
-    mkdir build
-    cd build
-    cmake ..
-    make
-    sudo make install
-    sudo ldconfig
-
-### Adjust Maximum Shared Memory
-Since the transmitter is using the Tagged Stream blocks it has to store a complete frame in the buffer before processing it. The default maximum shared memory might not be enough on most Linux systems. It can be increased with
-
-    sudo sysctl -w kernel.shmmax=2147483648
-
-### OFDM PHY
-
-The physical layer is encapsulated in a hierarchical block to allow for a clearer transceiver structure in GNU Radio Companion. This hierarchical block is not included in the installation process. You have to open ```/examples/wifi_phy_hier.grc``` with GNU Radio Companion and build it. This will install the block in ```~/.grc_gnuradio/```.
-
-
-### Check message port connections
-
-Sometime the connections between the message ports (the gray ones in GNU Radio Companion) break. Therefore, please open the flow graphs and assert that everything is connected. It should be pretty obvious how the blocks are supposed to be wired. Actually this should not happen anymore, so if your ports are still unconnected please drop me a mail.
-
-
-### Python OpenGL
-
-If you want to run the receive demo (the one that plots the subcarrier constellations), please assert that you have python-opengl installed. The nongl version of the plot does not work for me.
-
-
-### Run volk_profile
-
-volk_profile is part of GNU Radio. It benchmarks different SIMD implementations on your PC and creates a configuration file that stores the fastest version of every function. This can speed up the computation considerably and is required in order to deal with the high rate of incoming samples.
-
-
-### Calibrate your daughterboard
-
-If you have a WBX, SBX, or CBX daughterboard you should calibrate it in order to minimize IQ imbalance and TX DC offsets. See the [application notes](http://files.ettus.com/manual/page_calibration.html).
-
-
-
-# Checking you installation
-
-As a first step I recommend to test the ```wifi_loopback.grc``` flow graph. This flow graph does not need any hardware and allows you to ensure that the software part is installed correctly. So open the flow graph and run it. If everything works as intended you should see some decoded 'Hello World' packets in the console.
-
-## Troubleshooting
-
-If GRC complains that it can't find some blocks (other than performance counters and hierarchical blocks) like
-
-    >>> Error: Block key "ieee802_11_ofdm_mac" not found in Platform - grc(GNU Radio Companion)
-    >>> Error: Block key "foo_packet_pad" not found in Platform - grc(GNU Radio Companion)
-
-Most likely you used a different ```CMAKE_INSTALL_PREFIX``` for the module than for GNU Radio. Therefore, the blocks of the module ended up in a different directory and GRC can't find them. You have to tell GRC where these blocks are by creating/adding to your ```~/.gnuradio/config.conf``` something like
-
-    [grc]
-    global_blocks_path = /opt/local/share/gnuradio/grc/blocks
-    local_blocks_path = /Users/basti/usr/share/gnuradio/grc/blocks
-
-But with the directories that match your installation.
-
+    gnuradio-companion --version
+    
+# Troubleshooting
+- If you see ```ImportError: No module named wifi_phy_hier``` when running ```./phy_wifi.py```, open ```example\wifi_phy_hier.grc``` in GNURadio and generate the flow graph. You should be able to see ```wifi_phy_hier.py``` is generated under ```~/.grc_gnuradio/```.
+- If you see ```return _fft_swig.fft_vcc_make(fft_size, forward, window, shift, nthreads) RuntimeError: std::exception``` when running ```./phy_wifi.py```, use ```sudo ./phy_wifi.py```
 
 # Usage
+1. Open a terminal and run
+    ./ul_buffer.py
+    
+   This program stores the packets to be sent and those received into TX and RX buffers, respectively. ```mac_wifi.py``` continuously checks if the TX buffer is non-empty, i.e., there is packet to deliver, and stores the received packets into the RX buffer. The buffer sizes would be displayed once changed.
+   
+2. Open another terminal and run
+    ./ul_traffic.py
+    
+   This program generates ```n``` packets every ```t``` seconds and sends them to the TX buffer in 1. For test purpose, the generated packets are ```TEST_k``` (k=1,2,3,4).
+   Note: only run ```ul_traffic.py``` after the ```ul_buffer.py``` starts, as the latter is on the server side of the socket communication.
 
-
-## Simulation
-
-The loopback flow graph should give you an idea of how simulations can be conducted. To ease use, most blocks have debugging and logging capabilities that can generate traces of the simulation. You can read about the logging feature and how to use it on the [GNU Radio Wiki](http://gnuradio.org/doc/doxygen/page_logger.html).
-
-
-## Unidirectional communication
-
-As first over the air test I recommend to try ```wifi_rx.grc``` and ```wifi_tx.grc```. Just open the flow graphs in GNU Radio companion and execute them. If it does not work out of the box, try to play around with the gain. If everything works as intended you should see similar output as in the ```wifi_loopback.grc``` example.
-
-
-## RX frames from a WiFi card
-
-TBD
-
-
-## TX frames to a WiFi card
-
-TBD
-
-
-## Transceiver (SDR <-> SDR)
-
-TBD
-
-
-## Ad Hoc Network with WiFi card
-
-- The transceiver is currently connected to a TAP device, i.e. is a virtual Ethernet interface. Therefore, we have no WiFi signaling like association requests and hence, the transceiver can not "join" an ad hoc network. You have to make some small changes to the kernel in order to convince you WiFi card to send to this hosts nevertheless.
-- The transceiver can not respond to ACKs in time. This is kind of an architectural limitation of USRP + GNU Radio since Ethernet and computations on a normal CPU introduce some latency. You can set the number of ACK retries to zero and handle retransmits on higher layers (-> TCP).
-- RTS/CTS is not working for the same reason. You can however just disable this mechanism.
-- Currently, there is no CSMA/CA mechanism, but this can be implemented on the FPGA.
-
-
-# Troubleshooting
-
-- Please check compile and installation logs. They might contain interesting information.
-- Did you calibrate your daughterboard?
-- Did you run volk_profile?
-- Did you try different gain settings?
-- Did you close the case of the devices?
-- Did you try real-time priority?
-- Did you compile GNU Radio and gr-ieee802-11 in release mode?
-- If you see warnings that ```blocks_ctrlport_monitor_performance``` is missing that means that you installed GNU Radio without control port or performance counters. These blocks allow you to monitor the performance of the transceiver while it is running, but are not required. You can just delete them from the flow graph.
-- The message
-
-    You must now use ifconfig to set its IP address. E.g.,
-    $ sudo ifconfig tap0 192.168.200.1
-
-is normal and is output by the TUN/Tap Block during startup. The configuration of the TUN/TAP interface is handled by the scripts in the ```apps``` folder.
-- Did you try to tune the RF frequency out of the band of interest (i.e. used the LO offset menu of the flow graphs)?
-- If 'D's appear, it might be related to your Ethernet card. Assert that you made the sysconf changes recommended by Ettus. Did you try to connect you PC directly to the USRP without a switch in between?
-
-
-# Asking for help
-
-In order to help you it is crucial that you provide enough information about what is going wrong and what you are actually trying to do. So if you write me please include at least the following
-
-- OS (Ubuntu, OSX...)
-- hardware (SDR and daughterboard)
-- GNU Radio version
-- What are you trying to do
-- What is you setup, i.e. are you transmitting between SDRs or with WiFi cards.
-- Bandwidth and frequency
-- What did you already do to debug?
-- Where exactly does it break, i.e. is frame detection working? Is the signal field decoded correctly?).
-
+3. Open a new terminal and run
+   ./phy_wifi.py
+   
+   This is the physical layer implementation, which is based on the hierarchical flow graph ```wifi_phy_hier.grc```. PHY sends valid received packets for MAC for further process, and takes care of the packet transmission.
+   The simulated MAC address of the USRP node is decided by the node number, which can be specified using parameter ```-n```, e.g., ```./phy_wifi.py -n 1```.
+   
+4. Open a terminal and run
+   ./mac_wifi.py
+   
+   This program simulates the MAC layer behaviors, such as Clear Channel Assessment (CCA), waiting for the ack. It will ask ```phy_wifi.py``` for node ID and delivers its packets to Node (node + 1), such as Node 1 -> Node 2 -> Node 3 ... So if you configure one USRP as Node 1 and another as Node 2, you would only receive ACK on Node 1, as all traffic on Node 2 targets Node 3. To allow bidirectional data transfer between Node 1 and Node 2, you can modify the ```dest_mac``` in the source code.
+   
+# Tricks
+Use ```tmux``` to manage multiple terminals.
 
 # Further information
-
-For further information please checkout our project page
-[http://www.ccs-labs.org/projects/wime/](http://www.ccs-labs.org/projects/wime/)
+If you have any further questions or suggestions, please feel free to contact
+Haoyang Lu, (haoyanglu@pitt.edu)
+University of Pittsburgh
