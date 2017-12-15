@@ -801,7 +801,7 @@ def main(top_block_cls=wifi_transceiver, options=None):
 
     usrp_ip = options.usrp_ip
     if "" != usrp_ip and not usrp_ip.startswith("addr="):  # USRP address, if specified, must start with "addr="
-        options.usrp_ip = "addr=", usrp_ip
+        options.usrp_ip = "addr=%s" % usrp_ip
 
     assert options.samp_rate in [10e6, 20e6], "Incorrect sample_rate. [10 or 20 MHz]"
 
@@ -810,6 +810,7 @@ def main(top_block_cls=wifi_transceiver, options=None):
     print "-------------------------"
     print "... PHY layer running ..."
     print " (Ctrl + C) to exit"
+    print "USRP IP: ", options.usrp_ip
     print "-------------------------"
 
     rx_client_thread = rx_client(options.PHYRXport, my_mac)
