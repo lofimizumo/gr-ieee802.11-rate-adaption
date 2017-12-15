@@ -41,26 +41,26 @@ retx_max=(4 0)      # Maximum No. of retries
 # Sanity check
 if [ "${rate_control[0]}" != none ] && [ "${rate_control[0]}" != "aarf" ] && [ "${rate_control[0]}" != "minstrel" ]
 then
-    echo "Wrong rate adaptation parameter for USRP 0: ${rate_control[0]}"
+    echo "Wrong rate adaptation parameter for USRP Node ${localNodeId[0]}: ${rate_control[0]}"
     echo "Expected: none, aarf, minstrel"
     exit
 fi
 
 if [ ${localNodeId[0]} == ${destNodeId[0]} ]; then
-    echo "Node 0 can\'t transmit to itself"
+    echo "Node ${localNodeId[0]} can\'t transmit to itself"
     exit
 fi
 
 if [ $n_usrp == 2 ]; then
 
     if [ ${localNodeId[1]} == ${destNodeId[1]} ]; then
-        echo "Node 1 can\'t transmit to itself"
+        echo "Node ${localNodeId[1]} can\'t transmit to itself"
         exit
     fi
 
     if [ "${rate_control[1]}" != none ] && [ "${rate_control[1]}" != "aarf" ] && [ "${rate_control[1]}" != "minstrel" ]
     then
-        echo "Wrong rate adaptation parameter for USRP 1: ${rate_control[1]}"
+        echo "Wrong rate adaptation parameter for USRP ${localNodeId[1]}: ${rate_control[1]}"
         echo "Expected: none, aarf, minstrel"
         exit
     fi
@@ -113,27 +113,27 @@ fi
 mac_cmd="mac_wifi.py --MACport=${MACport[$usrp_no]} --PHYport=${PHYport[$usrp_no]} --encoding=${encoding[$usrp_no]}\
  --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]} --dest_node=${destNodeId[$usrp_no]}"
 
-echo "======= USRP $usrp_no ============="
+echo "======= USRP Node ${localNodeId[$usrp_no]} ========"
 echo "CMD 1: $buf_cmd"
 echo "CMD 2: $tra_cmd"
 echo "CMD 3: $phy_cmd"
 echo "CMD 4: $mac_cmd"
 echo "============================"
 
-echo "[$usrp_no] Start PHY"
+echo "[${localNodeId[$usrp_no]}] Start PHY"
 ($prefix$phy_cmd) &
 sleep 5
 
-echo "[$usrp_no] Start buffer"
+echo "[${localNodeId[$usrp_no]}] Start buffer"
 ($prefix$buf_cmd) &
 sleep 5
 
-echo "[$usrp_no] Generate traffic"
+echo "[${localNodeId[$usrp_no]}] Generate traffic"
 $prefix$tra_cmd
-echo "[$usrp_no] Traffic generated"
+echo "[${localNodeId[$usrp_no]}] Traffic generated"
 sleep 5
 
-echo "[$usrp_no] Start MAC"
+echo "[${localNodeId[$usrp_no]}] Start MAC"
 ($prefix$mac_cmd) &
 
 ##########################################
@@ -152,7 +152,7 @@ if [ $n_usrp == 2 ]; then
     mac_cmd="mac_wifi.py --MACport=${MACport[$usrp_no]} --PHYport=${PHYport[$usrp_no]} --encoding=${encoding[$usrp_no]}\
      --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]} --dest_node=${destNodeId[$usrp_no]}"
 
-    echo "======= USRP $usrp_no ============="
+    echo "======= USRP Node ${localNodeId[$usrp_no]} ========"
     echo "CMD 1: $buf_cmd"
     echo "CMD 2: $tra_cmd"
     echo "CMD 3: $phy_cmd"
@@ -160,20 +160,20 @@ if [ $n_usrp == 2 ]; then
     echo "============================"
 
     # Run commands
-    echo "[$usrp_no] Start PHY"
+    echo "[${localNodeId[$usrp_no]}] Start PHY"
     ($prefix$phy_cmd) &
     sleep 5
 
-    echo "[$usrp_no] Start buffer"
+    echo "[${localNodeId[$usrp_no]}] Start buffer"
     ($prefix$buf_cmd) &
     sleep 5
 
-    echo "[$usrp_no] Generate traffic"
+    echo "[${localNodeId[$usrp_no]}] Generate traffic"
     $prefix$tra_cmd
-    echo "[$usrp_no] Traffic generated"
+    echo "[${localNodeId[$usrp_no]}] Traffic generated"
     sleep 5
 
-    echo "[$usrp_no] Start MAC"
+    echo "[${localNodeId[$usrp_no]}] Start MAC"
     ($prefix$mac_cmd) &
 fi
 

@@ -47,9 +47,16 @@ from wifi_phy_hier import wifi_phy_hier  # grc-generated hier_block
 from gnuradio import qtgui
 
 
-def print_msg(msg, log=True):
+def print_msg(msg, node, log=True):
+    """
+    Print debug info
+    :param msg: message to print
+    :param node: node ID as prefix
+    :param log: print flag
+    :return: none
+    """
     if log:
-        print msg
+        print "[%d] %s" % (node, msg)
 
 
 class wifi_transceiver(gr.top_block, Qt.QWidget):
@@ -472,16 +479,18 @@ class rx_client(threading.Thread):
     and store the packets to corresponding buffers
     :param PHYRXport: socket port
     :param my_mac: local MAC address
+    :param node: USRP node No. (for print use only)
     :param print_buffer: flag of printing buffer size
     :param print_beacon: flag of printing beacons
     :param short_beacon_info: True - print partial Beacon info
     :return: none
     """
 
-    def __init__(self, PHYRXport, my_mac, print_buffer=False, print_beacon=False, short_beacon_info=True):
+    def __init__(self, PHYRXport, my_mac, node, print_buffer=False, print_beacon=False, short_beacon_info=True):
         threading.Thread.__init__(self)
 
         self.my_mac = my_mac
+        self.node = node
         self.print_buffer = print_buffer
         self.print_beacon = print_beacon
         self.short_beacon_info = short_beacon_info
@@ -494,7 +503,7 @@ class rx_client(threading.Thread):
         self.running = True
 
     def run(self):
-        print "rx_client starts to check received packets from PHY (class wifi_transceiver)"
+        print_msg("rx_client starts to check received packets from PHY (class wifi_transceiver)", self.node)
         self.phy_rx_client, _ = self.phy_rx_server.accept()  # accept connections from outside
 
         while self.running:
@@ -544,36 +553,35 @@ class rx_client(threading.Thread):
 
             if self.print_buffer:
                 # Queue size
-                print "=========== BUFFER STATUS ==========="
-                print "DATA   [%i]" % data.qsize()
-                print "ACK    [%i]" % ack.qsize()
-                print "RTS    [%i]" % rts.qsize()
-                print "CTS    [%i]" % cts.qsize()
-                print "BEACON [%i]" % bcn.qsize()
-                print "OTHER  [%i]" % other.qsize()
+                print_msg("=========== BUFFER STATUS ===========", self.node)
+                print_msg("DATA   [%i]" % data.qsize(), self.node)
+                print_msg("ACK    [%i]" % ack.qsize(), self.node)
+                print_msg("RTS    [%i]" % rts.qsize(), self.node)
+                print_msg("CTS    [%i]" % cts.qsize(), self.node)
+                print_msg("BEACON [%i]" % bcn.qsize(), self.node)
+                print_msg("OTHER  [%i]" % other.qsize(), self.node)
 
             if self.print_beacon:
                 # Beacon list
-                print "===== NEIGHBOR NODES INFORMATION ===="
+                print_msg("===== NEIGHBOR NODES INFORMATION ====", self.node)
                 x = bcn.qsize()
                 if self.short_beacon_info:
-                    print "      MAC             SSID"
+                    print_msg("      MAC             SSID", self.node)
                     while x > 0:
                         item = bcn.get()
-                        print "%s %s" % (mac.format_mac(item["MAC"]), item["SSID"])
+                        print_msg("%s %s" % (mac.format_mac(item["MAC"]), item["SSID"]), self.node)
                         bcn.put(item)
                         x -= 1
 
                 else:
-                    print "      MAC           Timestamp   BI      OFFSET         SSID"
+                    print_msg("      MAC           Timestamp   BI      OFFSET         SSID", self.node)
                     while x > 0:
                         item = bcn.get()
-                        print "%s %d %s %d %s" % (
-                            mac.format_mac(item["MAC"]), item["timestamp"], item["BI"], item["OFFSET"], item["SSID"])
+                        print_msg("%s %d %s %d %s" % (
+                            mac.format_mac(item["MAC"]), item["timestamp"], item["BI"], item["OFFSET"], item["SSID"]), self.node)
                         bcn.put(item)
                         x -= 1
-                print "====================================="
-        print "I am done buddy"
+                print_msg("=====================================", self.node)
 
     def stop(self):
         self.running = False
@@ -581,7 +589,7 @@ class rx_client(threading.Thread):
         self.phy_rx_server.close()
         self.phy_rx_client.shutdown(socket.SHUT_RDWR)
         self.phy_rx_client.close()
-        print "rx_clients stops"
+        print_msg("rx_clients stops", self.node)
 
 
 class proc_mac_request(threading.Thread):
@@ -620,10 +628,9 @@ class proc_mac_request(threading.Thread):
         T_transmit_PHY = 0  # Time elapsed in PHY layer due to a packet tx request
 
         n_ack_rx = 0  # Number of ACK received
-        n_ack_tx = 0  # Number of ACK sent
         n_data_tx = 0  # Number of packets sent
         n_data_retx = 0  # Number of retransmitted DATA frame
-        n_data_rx = 0  # Number of DATA frame received
+        n_data_rx = 0  # Number of DATA frame received (always equal to n_ack_tx)
         n_cca = 0  # Number of power measurements (0: disable carrier sensing)
 
         while self.running:
@@ -632,15 +639,13 @@ class proc_mac_request(threading.Thread):
 
             print_stat = False
             if "PKT" == arrived_packet["HEADER"]:
-                print_msg("Mac requests a packet transmission", False)
+                print_msg("Mac requests a packet transmission", self.node, False)
                 print_stat = True
                 pkt_type = arrived_packet["DATA"]["HEADER"]
                 if "DATA" == pkt_type:
                     n_data_tx += 1
                 elif "DATA_RETX" == pkt_type:
                     n_data_retx += 1
-                elif "ACK" == pkt_type:
-                    n_ack_tx += 1
                 t_socket = time.time() - arrived_packet["DATA"]["INFO"]["timestamp"]
                 t_socket_TOTAL = t_socket_TOTAL + t_socket  # Update the time used in the socket communication.
 
@@ -648,24 +653,22 @@ class proc_mac_request(threading.Thread):
                 item = arrived_packet["DATA"]["INFO"]["packet"]  # Copy the packet to send from the MAC message
 
                 r = gr.enable_realtime_scheduling()
-                if r != gr.RT_OK:
-                    print "Warning: failed to enable realtime scheduling"
-                t_2 = time.time()
-
+                print_msg("Warning: failed to enable realtime scheduling", self.node, r != gr.RT_OK)
+                t_2 = time.time()  # TODO: fix the timestamps
                 t_sendB = time.time()
 
                 self.wifi_transceiver.send_pkt(item, arrived_packet["DATA"]["INFO"]["encoding"])
 
                 t_sendC = time.time()
                 t_sendD = time.time()
-                if self.verbose:
-                    print "Time elapsed on graph configuration (TX Packet) = ", (t_sendB - t_2)
+                print_msg("Time elapsed on graph configuration (TX Packet) = %f" % (t_sendB - t_2), self.node,
+                          self.verbose)
                 T_transmit_USRP2 = T_transmit_USRP2 + t_sendC - t_sendB
                 T_configure_USRP2 = T_configure_USRP2 + t_sendD - t_sendA - (t_sendC - t_sendB)
                 T_transmit_PHY = T_transmit_PHY + t_sendD - t_sendA
 
             elif "CCA" == arrived_packet["HEADER"]:  # Carrier sensing request
-                print_msg("Mac requests a CCA", False)
+                print_msg("Mac requests a CCA", self.node, False)
                 t_senseA = time.time()
                 self.msgq.flush()
                 t_reconfig = time.time() - t_senseA
@@ -681,11 +684,12 @@ class proc_mac_request(threading.Thread):
                 T_sense_USRP2 = T_sense_USRP2 + (t_senseB - t_senseA)
                 T_sense_PHY = T_sense_PHY + (t_senseC - t_senseA)
                 n_cca += 1
-                print_msg("Time elapsed on graph configuration (Carrier Sensing) = %f" % t_reconfig, self.verbose)
+                print_msg("Time elapsed on graph configuration (Carrier Sensing) = %f" % t_reconfig, self.node,
+                          self.verbose)
 
             elif "TAIL" == arrived_packet["HEADER"]:  # MAC requests an incoming packet from the PHY
                 header_pkt = arrived_packet["DATA"]
-                print_msg("Mac requests PHY to report a %s pkt" % header_pkt, False)
+                print_msg("Mac requests PHY to report a %s pkt" % header_pkt, self.node, False)
 
                 if header_pkt == "DATA" and not data.empty():  # There are Data packets?
                     print_stat = True
@@ -715,23 +719,23 @@ class proc_mac_request(threading.Thread):
                 plcp.send_to_mac(socket_client, phy_pkt)  # Send the result (PHY packet) to MAC layer
 
             if self.verbose and n_cca > 0:
-                print_msg("===================== Average statistics ====================")
-                print_msg("No. of carrier sensing requests = %d" % n_cca)
-                print_msg("Time spent by USRP2 on sensing channel = \t", T_sense_USRP2 / n_cca)
-                print_msg("Time spent by PHY layer on sensing channel = \t", T_sense_PHY / n_cca)
+                print_msg("===================== Average statistics ====================", self.node)
+                print_msg("No. of carrier sensing requests = %d" % n_cca, self.node)
+                print_msg("Time spent by USRP2 on sensing channel = %f" % (T_sense_USRP2 / n_cca), self.node)
+                print_msg("Time spent by PHY layer on sensing channel = %f" % (T_sense_PHY / n_cca), self.node)
                 n_ack_rx = 0  # Number of ACK received
-                n_ack_tx = 0  # Number of ACK sent
                 n_data_tx = 0  # Number of packets sent
                 n_data_retx = 0  # Number of retransmitted DATA frame
                 n_data_rx = 0  # Number of DATA frame received
-            print_msg("CCA: %d, DATA TX: %d, DATA RETX: %d, ACK RX: %d, DATA RX: %d, ACK TX: %d" % (
-                n_cca, n_data_tx, n_data_retx, n_ack_rx, n_data_rx, n_ack_tx), print_stat)
+            print_msg("CCA: %d, DATA TX: %d, DATA RETX: %d, ACK RX: %d, DATA RX: %d" % (
+                n_cca, n_data_tx, n_data_retx, n_ack_rx, n_data_rx), self.node, print_stat)
             if self.verbose and n_data_tx > 1:
-                print_msg("Time spent by USRP2 on sending a packet = \t", T_transmit_USRP2 / n_data_tx)
-                print_msg("Time spent by USRP2 on configuring the graphs\t", T_configure_USRP2 / n_data_tx)
-                print_msg("Time spent by PHY on sending a packet = \t", T_transmit_PHY / n_data_tx)
-                print_msg("Time spent on Socket Communication = \t", t_socket_TOTAL / n_data_tx)
-                print_msg("=============================================================")
+                print_msg("Time spent by USRP2 on sending a packet = %f" % (T_transmit_USRP2 / n_data_tx), self.node)
+                print_msg("Time spent by USRP2 on configuring the graphs = %f" % (T_configure_USRP2 / n_data_tx),
+                          self.node)
+                print_msg("Time spent by PHY on sending a packet = %f" % (T_transmit_PHY / n_data_tx), self.node)
+                print_msg("Time spent on Socket Communication = %f" % (t_socket_TOTAL / n_data_tx), self.node)
+                print_msg("=============================================================", self.node)
 
     def stop(self):
         self.running = False
@@ -802,13 +806,14 @@ def main(top_block_cls=wifi_transceiver, options=None):
 
     my_mac = mac.assign_mac(options.node)  # Assign the MAC address of the node
 
-    print "-------------------------"
-    print "... PHY layer running ..."
-    print " (Ctrl + C) to exit"
-    print "USRP IP: ", options.usrp_ip
-    print "-------------------------"
+    print_msg("-------------------------", options.node)
+    print_msg("... PHY layer running ...", options.node)
+    print_msg(" (Ctrl + C) to exit", options.node)
+    print_msg("Node %d - %s" % (options.node, mac.format_mac(my_mac)), options.node)
+    print_msg("USRP IP: %s" % options.usrp_ip, options.node)
+    print_msg("-------------------------", options.node)
 
-    rx_client_thread = rx_client(options.PHYRXport, my_mac)
+    rx_client_thread = rx_client(options.PHYRXport, my_mac, options.node)
     rx_client_thread.start()
 
     msgq = gr.msg_queue(1)
