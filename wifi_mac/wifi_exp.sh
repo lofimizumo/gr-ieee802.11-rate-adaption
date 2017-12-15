@@ -1,4 +1,9 @@
 #!/bin/bash
+# Configure WiFi transceivers
+# Usage:
+#   ./wifi_exp.sh   -- Configure 1 USRP
+#   ./wifi_exp.sh 1 -- same as above
+#   ./wifi_exp.sh 2 -- Configure 2 USRPs
 
 set -e  # terminate installation upon error occurs
 
@@ -14,7 +19,7 @@ echo "$n_usrp USRP(s) used"
 PHYport=(8013 8014)     # Socket No. of PHY
 PHYRXport=(8513 8514)   # Socket No. of PHY RX
 localNodeId=(1 2)       # Local node
-destNodeId=(2 3)        # Destination node
+destNodeId=(2 1)        # Destination node
 usrp_addr=("" "192.168.10.2")
 
 # Buffer parameters
@@ -41,14 +46,25 @@ then
     exit
 fi
 
-if [ "${rate_control[1]}" != none ] && [ "${rate_control[1]}" != "aarf" ] && [ "${rate_control[1]}" != "minstrel" ]
-then
-    echo "Wrong rate adaptation parameter for USRP 0: ${rate_control[1]}"
-    echo "Expected: none, aarf, minstrel"
+if [ ${localNodeId[0]} == ${destNodeId[0]} ]; then
+    echo "Node 0 can\'t transmit to itself"
     exit
 fi
 
 if [ $n_usrp == 2 ]; then
+
+    if [ ${localNodeId[1]} == ${destNodeId[1]} ]; then
+        echo "Node 1 can\'t transmit to itself"
+        exit
+    fi
+
+    if [ "${rate_control[1]}" != none ] && [ "${rate_control[1]}" != "aarf" ] && [ "${rate_control[1]}" != "minstrel" ]
+    then
+        echo "Wrong rate adaptation parameter for USRP 1: ${rate_control[1]}"
+        echo "Expected: none, aarf, minstrel"
+        exit
+    fi
+
     if [ ${PHYport[0]} == ${PHYport[1]} ]; then
         echo "PHYports are the same!"
         exit
@@ -69,7 +85,7 @@ if [ $n_usrp == 2 ]; then
         exit
     fi
 
-    if [ ${usrp_addr[0]} == ${usrp_addr[1]} ]; then
+    if [ "${usrp_addr[0]}" == "${usrp_addr[1]}" ]; then
         echo "usrp_addr are the same!"
         exit
     fi
@@ -81,11 +97,12 @@ cd $dir
 echo "Entering $PWD"
 
 prefix="python "
+
 ##########################################
 # Configure the first USRP
 ##########################################
 
-# Commands
+# Assemble commands
 usrp_no=0
 buf_cmd="ul_buffer.py --MACport=${MACport[$usrp_no]}"
 tra_cmd="ul_traffic.py --MACport=${MACport[$usrp_no]} -n ${n_pkt[$usrp_no]} -t ${t_interval[$usrp_no]}"
@@ -94,9 +111,8 @@ if [ "${usrp_addr[$usrp_no]}" != "" ]; then
     phy_cmd="$phy_cmd -a ${usrp_addr[$usrp_no]}"
 fi
 mac_cmd="mac_wifi.py --MACport=${MACport[$usrp_no]} --PHYport=${PHYport[$usrp_no]} --encoding=${encoding[$usrp_no]}\
- --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]}"
+ --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]} --dest_node=${destNodeId[$usrp_no]}"
 
-# Commands
 echo "======= USRP $usrp_no ============="
 echo "CMD 1: $buf_cmd"
 echo "CMD 2: $tra_cmd"
@@ -124,8 +140,8 @@ echo "[$usrp_no] Start MAC"
 # Configure the second USRP (optional)
 ##########################################
 
+# Assemble commands
 if [ $n_usrp == 2 ]; then
-    # Commands
     usrp_no=1
     buf_cmd="ul_buffer.py --MACport=${MACport[$usrp_no]}"
     tra_cmd="ul_traffic.py --MACport=${MACport[$usrp_no]} -n ${n_pkt[$usrp_no]} -t ${t_interval[$usrp_no]}"
@@ -134,9 +150,8 @@ if [ $n_usrp == 2 ]; then
         phy_cmd="$phy_cmd -a ${usrp_addr[$usrp_no]}"
     fi
     mac_cmd="mac_wifi.py --MACport=${MACport[$usrp_no]} --PHYport=${PHYport[$usrp_no]} --encoding=${encoding[$usrp_no]}\
-     --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]}"
+     --beta=$beta -r ${retx_max[$usrp_no]} -R ${rate_control[$usrp_no]} --dest_node=${destNodeId[$usrp_no]}"
 
-    # Commands
     echo "======= USRP $usrp_no ============="
     echo "CMD 1: $buf_cmd"
     echo "CMD 2: $tra_cmd"
@@ -144,7 +159,7 @@ if [ $n_usrp == 2 ]; then
     echo "CMD 4: $mac_cmd"
     echo "============================"
 
-
+    # Run commands
     echo "[$usrp_no] Start PHY"
     ($prefix$phy_cmd) &
     sleep 5

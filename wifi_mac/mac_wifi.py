@@ -80,6 +80,8 @@ def main():
                         7 -> 54 (27) Mbit/s (QAM64 r=0.75)")
     parser.add_option("", "--beta", type="float", default=1000,
                       help="Scaling Time Parameter, [default=%default]")
+    parser.add_option("", "--dest_node", type="int", default=1,
+                      help="Destination USRP2 node of DATA frames [default=%default]")
     parser.add_option("-t", "--time_slot", type="float", default=9e-6,
                       help="Time slot value, [default=%default]")
     parser.add_option("-B", "--BI", type="float", default=1,
@@ -112,8 +114,9 @@ def main():
     assert reply_phy == "YES", "Can't get node ID"
 
     # Configure local and destination MAC address according to the Node ID
+    assert node != options.dest_node, "Destination node ID can't be set to itself's"
     my_mac = mac.assign_mac(node)  # MAC address for this node
-    dest_mac = mac.assign_mac(node + 1)  # Destination address of upper layer packets
+    dest_mac = mac.assign_mac(options.dest_node)  # Destination address of upper layer packets
 
     # Obtain sample rate from PHY server
     reply_phy, samp_rate = mac.read_phy_response(phy_port, "SAMP_RATE")
