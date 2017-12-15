@@ -31,7 +31,7 @@ import time
 import uwicore_mac_utils as mac
 import uwicore_mpif as plcp
 from optparse import OptionParser
-
+from Queue import Queue
 from gnuradio.eng_option import eng_option
 
 sys.path.append(os.environ.get('GRC_HIER_PATH', os.path.expanduser('~/.grc_gnuradio')))
@@ -45,7 +45,6 @@ from gnuradio.qtgui import Range, RangeWidget
 from wifi_phy_hier import wifi_phy_hier  # grc-generated hier_block
 
 from gnuradio import qtgui
-from buffer_lib import Buffer
 
 
 def print_msg(msg, log=True):
@@ -505,16 +504,16 @@ class rx_client(threading.Thread):
 
             if "DATA" == arrived_packet["HEADER"] or "DATA_FRAG" == arrived_packet["HEADER"]:  # DATA
                 if self.my_mac == arrived_packet["DATA"]["mac_add1"]:  # Is DATA addressed to this node?
-                    data.push(arrived_packet["DATA"])
+                    data.put(arrived_packet["DATA"])
                 else:
-                    other.push("random data")
+                    other.put("random data")
             elif "ACK" == arrived_packet["HEADER"]:  # ACK
                 if self.my_mac == arrived_packet["DATA"]["RX_add"]:  # Is ACK addressed to this node?
-                    ack.push(arrived_packet["DATA"])
+                    ack.put(arrived_packet["DATA"])
             elif "RTS" == arrived_packet["HEADER"]:  # RTS
-                rts.push(arrived_packet["DATA"])
+                rts.put(arrived_packet["DATA"])
             elif "CTS" == arrived_packet["HEADER"]:  # CTS
-                cts.push(arrived_packet["DATA"])
+                cts.put(arrived_packet["DATA"])
             elif "BEACON" == arrived_packet["HEADER"]:  # BEACON
                 beacon = arrived_packet["DATA"]
                 msg = plcp.new_beacon()
@@ -523,46 +522,56 @@ class rx_client(threading.Thread):
                 msg["timestamp"] = beacon["timestamp"]
                 msg["BI"] = beacon["BI"]
                 msg["OFFSET"] = time.time() - beacon["timestamp"]
-                x = bcn.length()
+                x = bcn.qsize()
                 updated = False
+                mac_bcn = msg["MAC"]
 
                 # Update the beacon list
-                for i in range(0, x):
-                    if msg["MAC"] == bcn.read(i)["MAC"]:  # Check if AP is in the list
-                        bcn.remove(i)
-                        bcn.insert(i, msg)
+                while x > 0:
+                    tmp = bcn.get()
+                    if mac_bcn != tmp["MAC"]:
+                        bcn.put(tmp)
+                        x -= 1
+                    else:  # Update the AP state
+                        bcn.put(msg)
                         updated = True
                         break
 
-                if not updated:
-                    bcn.insert(x + 1, msg)
+                if not updated:  # AP is not in the list
+                    bcn.put(msg)
             else:
                 continue
 
             if self.print_buffer:
-                # Buffer size
+                # Queue size
                 print "=========== BUFFER STATUS ==========="
-                print "DATA   [%i]" % data.length()
-                print "ACK    [%i]" % ack.length()
-                print "RTS    [%i]" % rts.length()
-                print "CTS    [%i]" % cts.length()
-                print "BEACON [%i]" % bcn.length()
-                print "OTHER  [%i]" % other.length()
+                print "DATA   [%i]" % data.qsize()
+                print "ACK    [%i]" % ack.qsize()
+                print "RTS    [%i]" % rts.qsize()
+                print "CTS    [%i]" % cts.qsize()
+                print "BEACON [%i]" % bcn.qsize()
+                print "OTHER  [%i]" % other.qsize()
 
             if self.print_beacon:
                 # Beacon list
                 print "===== NEIGHBOR NODES INFORMATION ===="
+                x = bcn.qsize()
                 if self.short_beacon_info:
                     print "      MAC             SSID"
-                    for i in range(0, bcn.length()):
-                        item = bcn.read(i)
+                    while x > 0:
+                        item = bcn.get()
                         print "%s %s" % (mac.format_mac(item["MAC"]), item["SSID"])
+                        bcn.put(item)
+                        x -= 1
+
                 else:
                     print "      MAC           Timestamp   BI      OFFSET         SSID"
-                    for i in range(0, bcn.length()):
-                        item = bcn.read(i)
+                    while x > 0:
+                        item = bcn.get()
                         print "%s %d %s %d %s" % (
                             mac.format_mac(item["MAC"]), item["timestamp"], item["BI"], item["OFFSET"], item["SSID"])
+                        bcn.put(item)
+                        x -= 1
                 print "====================================="
         print "I am done buddy"
 
@@ -583,6 +592,7 @@ class proc_mac_request(threading.Thread):
     :param wifi_transceiver: wifi_transceiver class
     :return: none
     """
+
     def __init__(self, options, msgq, wifi_transceiver):
         threading.Thread.__init__(self)
 
@@ -677,37 +687,21 @@ class proc_mac_request(threading.Thread):
                 header_pkt = arrived_packet["DATA"]
                 print_msg("Mac requests PHY to report a %s pkt" % header_pkt, False)
 
-                if header_pkt == "DATA" and data.length() > 0:  # There are Data packets?
+                if header_pkt == "DATA" and not data.empty():  # There are Data packets?
                     print_stat = True
                     n_data_rx += 1
-                    data.elements.reverse()
-                    x = data.read(0)
-                    phy_pkt = plcp.create_packet("YES", x)
-                    data.pop()
-                    data.elements.reverse()
+                    phy_pkt = plcp.create_packet("YES", data.get())
 
-                elif header_pkt == "ACK" and ack.length() > 0:  # There are ACK packets?
+                elif header_pkt == "ACK" and not ack.empty():  # There are ACK packets?
                     print_stat = True
                     n_ack_rx += 1
-                    ack.elements.reverse()
-                    x = ack.read(0)
-                    phy_pkt = plcp.create_packet("YES", x)
-                    ack.pop()
-                    ack.elements.reverse()
+                    phy_pkt = plcp.create_packet("YES", ack.get())
 
-                elif header_pkt == "RTS" and rts.length() > 0:  # There are RTS packets?
-                    rts.elements.reverse()
-                    x = rts.read(0)
-                    phy_pkt = plcp.create_packet("YES", x)
-                    rts.pop()
-                    rts.elements.reverse()
+                elif header_pkt == "RTS" and not rts.empty():  # There are RTS packets?
+                    phy_pkt = plcp.create_packet("YES", rts.get())
 
-                elif header_pkt == "CTS" and cts.length() > 0:  # There are CTS packets?
-                    cts.elements.reverse()
-                    x = cts.read(0)
-                    phy_pkt = plcp.create_packet("YES", x)
-                    cts.pop()
-                    cts.elements.reverse()
+                elif header_pkt == "CTS" and not cts.empty():  # There are CTS packets?
+                    phy_pkt = plcp.create_packet("YES", cts.get())
 
                 elif header_pkt == "NODE":
                     phy_pkt = plcp.create_packet("YES", self.node)
@@ -744,12 +738,13 @@ class proc_mac_request(threading.Thread):
         self.server.shutdown(socket.SHUT_RDWR)
         self.server.close()
 
-data = Buffer()
-ack = Buffer()
-rts = Buffer()
-cts = Buffer()
-bcn = Buffer()
-other = Buffer()
+
+data = Queue()
+ack = Queue()
+rts = Queue()
+cts = Queue()
+bcn = Queue()
+other = Queue()
 
 
 def main(top_block_cls=wifi_transceiver, options=None):
