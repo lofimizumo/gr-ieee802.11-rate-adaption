@@ -44,6 +44,14 @@ The software is tested on Ubuntu 16.04 and GNU Radio Companion 3.7.11.1. To chec
     gnuradio-companion --version
 
 # Usage
+## Use one terminal and one command
+Open a terminal and run
+```bash
+    ./wifi_exp.sh
+```
+You can configure the parameters in this shell script, which invokes four separate Python scripts. You can also run those four files one by one, as shown below.
+
+## Run python scripts individually
 1. Open a terminal and run
 ```bash
     ./ul_buffer.py
@@ -72,7 +80,8 @@ The software is tested on Ubuntu 16.04 and GNU Radio Companion 3.7.11.1. To chec
 
 # Troubleshooting
 - If you see ``ImportError: No module named wifi_phy_hier`` when running ``./phy_wifi.py``, open ``example\wifi_phy_hier.grc`` in GNURadio and generate the flow graph. You should be able to see ``wifi_phy_hier.py`` is generated under ``~/.grc_gnuradio/``.
-- If you see ``return _fft_swig.fft_vcc_make(fft_size, forward, window, shift, nthreads) RuntimeError: std::exception`` when running ``./phy_wifi.py``, use ``sudo ./phy_wifi.py``
+- If you see ``return _fft_swig.fft_vcc_make(fft_size, forward, window, shift, nthreads) RuntimeError: std::exception`` when running ``./phy_wifi.py``, use ``sudo ./phy_wifi.py``. (A read-only ``.gr_fftw_wisdom`` under the ``home`` folder may be the reason of using ``sudo`` command. You can simply change its permissions to get rid of the boring ``sudo`` privilege.)
+
 - ``Python [Errno 98] Address already in use``. Kill the process that occupies the socket.
 ```bash
     kill -9 $(lsof -ti tcp:xxxx)
