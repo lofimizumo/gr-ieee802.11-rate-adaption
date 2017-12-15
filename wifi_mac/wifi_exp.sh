@@ -7,7 +7,7 @@ PHYport=8013      # Socket No. of PHY
 PHYRXport=8513    # Socket No. of PHY RX
 localNodeId=1     # Local node
 destNodeId=2      # Destination node
-usrp_addr=""    # 192.168.10.2
+usrp_addr="192.168.10.2"    # 192.168.10.2
 
 # Buffer parameters
 MACport=8001      # Socket No. of upper layer (buffer)
@@ -35,7 +35,10 @@ buf_cmd="ul_buffer.py --MACport=$MACport"
 tra_cmd="ul_traffic.py --MACport=$MACport -n $n_pkt -t $t_interval"
 
 phy_cmd="phy_wifi.py -n $localNodeId --PHYport=$PHYport --PHYRXport=$PHYRXport"
-
+if [ "$usrp_addr" != ""]
+then
+    phy_cmd = "$phy_cmd"-a $usrp_addri
+fi
 mac_cmd="mac_wifi.py --MACport=$MACport --PHYport=$PHYport --encoding=$encoding\
  --beta=$beta -r $retx_max -R $rate_control"
 
