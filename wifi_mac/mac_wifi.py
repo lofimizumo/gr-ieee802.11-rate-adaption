@@ -56,9 +56,16 @@ import uwicore_mac_utils as mac
 from RateAdapt import MinstrelController, AarfController
 
 
-def print_msg(msg, log=True):
+def print_msg(msg, node, log=True):
+    """
+    Print debug info
+    :param msg: message to print
+    :param node: node ID as prefix
+    :param log: print flag
+    :return: none
+    """
     if log:
-        print msg
+        print "[%d] %s" % (node, msg)
 
 
 # Finite State Machine MAC main
@@ -80,6 +87,8 @@ def main():
                         7 -> 54 (27) Mbit/s (QAM64 r=0.75)")
     parser.add_option("", "--beta", type="float", default=1000,
                       help="Scaling Time Parameter, [default=%default]")
+    parser.add_option("", "--dest_node", type="int", default=1,
+                      help="Destination USRP2 node of DATA frames [default=%default]")
     parser.add_option("-t", "--time_slot", type="float", default=9e-6,
                       help="Time slot value, [default=%default]")
     parser.add_option("-B", "--BI", type="float", default=1,
@@ -109,15 +118,16 @@ def main():
 
     # Obtain node id from PHY server
     reply_phy, node = mac.read_phy_response(phy_port, "NODE")
-    assert reply_phy == "YES", "Can't get node ID"
+    assert reply_phy == "YES", "[%d] Can't get node ID" % node
 
     # Configure local and destination MAC address according to the Node ID
+    assert node != options.dest_node, "[%d] Destination node ID can't be set to itself's" % node
     my_mac = mac.assign_mac(node)  # MAC address for this node
-    dest_mac = mac.assign_mac(node + 1)  # Destination address of upper layer packets
+    dest_mac = mac.assign_mac(options.dest_node)  # Destination address of upper layer packets
 
     # Obtain sample rate from PHY server
     reply_phy, samp_rate = mac.read_phy_response(phy_port, "SAMP_RATE")
-    assert reply_phy == "YES", "Can't get sample rate"
+    assert reply_phy == "YES", "[%d] Can't get sample rate" % node
 
     t_sym = mac.cal_sym_duration(samp_rate)  # calculate OFDM symbol duration
 
@@ -157,9 +167,9 @@ def main():
     processing_delay = 0.2  # data processing delay
     t_ack_timeout = (T_data_max + T_ack) * 1e-6 + SIFS + 2 * air_delay_max + processing_delay
 
-    print "ACK_time (s):%f, T_ack (s):%f" % (ACK_time, T_ack * 1e-6)
-    print "T_data_max (s):%f" % (T_data_max * 1e-6)
-    print "air_delay_max (s):%f" % air_delay_max
+    print_msg("ACK_time (s):%f, T_ack (s):%f" % (ACK_time, T_ack * 1e-6), node)
+    print_msg("T_data_max (s):%f" % (T_data_max * 1e-6), node)
+    print_msg("air_delay_max (s):%f" % air_delay_max, node)
 
     # Variables involving MAC tests
     t_csense = 0  # CS time
@@ -181,31 +191,30 @@ def main():
     beaconing = False  # Is ON the Beaconing process?
     fragmenting = 0  # Is the packet received a fragment?
 
-    timing_error = "Timing Error. Please increase the beta parameter."
+    timing_error = "[%d] Timing Error. Please increase the beta parameter." % node
 
-    print "============================================="
-    print " \t  MAC layer: DCF + RTS/CTS"
-    print "============================================="
-    print "Node ID:", node
-    print "MAC address:", mac.format_mac(my_mac)
-    print "Destination MAC:", mac.format_mac(dest_mac)
-    print "Rate:", encoding
+    print_msg("=============================================", node)
+    print_msg(" \t  MAC layer: DCF + RTS/CTS", node)
+    print_msg("=============================================", node)
+    print_msg("Node %d - %s" % (node, mac.format_mac(my_mac)), node)
+    print_msg("Target Node %d - %s" % (options.dest_node, mac.format_mac(dest_mac)), node)
+    print_msg("Rate: %d" % encoding, node)
     if retx_max != 0:
-        print "Retransmissions: Enabled (Maximum retries: %d)" % retx_max
+        print_msg("Retransmissions: Enabled (Maximum retries: %d)" % retx_max, node)
     else:
-        print "Retransmissions: Disabled"
-    print "Scaling time parameter:", beta
-    print "tslot(s): %f \t SIFS(s): %f" % (tslot, SIFS)
-    print "DIFS(s): %f \t T_ACK(s): %f" % (DIFS, ACK_time)
-    print "ACK Timeout (s): %f" % t_ack_timeout
-    print "pseudo-random exp. BACKOFF [%i,%i]" % (CW_min, CW_max)
+        print_msg("Retransmissions: Disabled", node)
+    print_msg("Scaling time parameter: %d" % beta, node)
+    print_msg("tslot(s): %f \t SIFS(s): %f" % (tslot, SIFS), node)
+    print_msg("DIFS(s): %f \t T_ACK(s): %f" % (DIFS, ACK_time), node)
+    print_msg("ACK Timeout (s): %f" % t_ack_timeout, node)
+    print_msg("pseudo-random exp. BACKOFF [%i,%i]" % (CW_min, CW_max), node)
     if options.RTS:
-        print "RTS/CTS: Dnabled"
-        print "\t with RTS Threshold(Bytes): %i" % RTS_THRESHOLD
+        print_msg("RTS/CTS: Dnabled", node)
+        print_msg("\t with RTS Threshold(Bytes): %i" % RTS_THRESHOLD, node)
     else:
-        print "RTS/CTS: Disabled"
-    print "Fragmentation Threshold (Bytes):", dot11FragmentationTh
-    print "============================================="
+        print_msg("RTS/CTS: Disabled", node)
+    print_msg("Fragmentation Threshold (Bytes):%i" % dot11FragmentationTh, node)
+    print_msg("=============================================", node)
     """
     Starts the MAC operation
         1. AARF, using int data_sel(int rate, bool success) to update the data rate
@@ -231,11 +240,11 @@ def main():
                 if my_mac == rts_pkt["RX_add"]:
                     print_msg("[R]-[RTS]-[DA:%s]-[SA:%s]-[duration:%f]-[IFM:1]" % (
                         mac.format_mac(rts_pkt["RX_add"]), mac.format_mac(rts_pkt["TX_add"]), rts_pkt["tx_time"]),
-                              print_data)
+                              node, print_data)
                     dest_mac = rts_pkt["TX_add"]  # Receiver Address of the CTS frame
-                    print "Dest MAC is %s ......" % dest_mac
+                    print_msg("Dest MAC is %s ......" % dest_mac, node)
                     RTS_duration = rts_pkt["tx_time"]  # Value of RTS' TX time
-                    print "RTS duration is %s......" % RTS_duration
+                    print_msg("RTS duration is %s......" % RTS_duration, node)
                     """
                     #============================================================
                     # /TEST/ UNCOMMENT TO CHECK RTS/CTS FUNCTIONALITY
@@ -250,14 +259,14 @@ def main():
                     #============================================================
                     """
                     state = "TRANSMITTING_CTS"
-                    print_msg("| IDLE | RTS received | %s |" % state, print_state_trans)
+                    print_msg("| IDLE | RTS received | %s |" % state, node, print_state_trans)
                 else:
                     print_msg("[R]-[RTS]-[DA:%s]-[SA:%s]-[duration:%f]-[IFM:0]" % (
                         mac.format_mac(rts_pkt["RX_add"]), mac.format_mac(rts_pkt["TX_add"]), rts_pkt["tx_time"]),
-                              print_data)
+                              node, print_data)
                     sleep_time = rts_pkt["tx_time"] / (1.0e3)  # Divided by 1e3 because tx_time is on milliseconds
                     NAV = mac.update_nav(time.time(), sleep_time, tslot)
-                    print_msg("| IDLE | RTS captured (update NAV) | %s |" % state, print_state_trans)
+                    print_msg("| IDLE | RTS captured (update NAV) | %s |" % state, node, print_state_trans)
 
             else:  # RTS is not received
                 reply_phy3, data_pkt = mac.read_phy_response(phy_port, "DATA")  # Check if DATA frame received
@@ -267,18 +276,18 @@ def main():
                     ack_addr = data_pkt["mac_add2"]  # address to respond
                     print_msg("[R]-[DATA]-[DA:%s]-[SA:%s]-[MF:0]-[Seq#:%i]-[""%s""]" % (
                         mac.format_mac(data_pkt["mac_add1"]), mac.format_mac(data_pkt["mac_add2"]), data_pkt["N_SEQ"],
-                        data_pkt["PAYLOAD"]), print_data)
-                    print_msg("| IDLE | DATA received | %s |" % state, print_state_trans)
+                        data_pkt["PAYLOAD"]), node, print_data)
+                    print_msg("| IDLE | DATA received | %s |" % state, node, print_state_trans)
                     mac.send_ul_buff_packet(mac_port, data_pkt["packet"][24:])
                 else:  # Check upper layer buffer for data to send
                     reply_up, PAYLOAD = mac.read_ul_buffer(mac_port)
                     if reply_up == "YES":
                         state = "WAIT_FOR_NAV"
-                        print_msg("| IDLE | MAC has DATA to Tx | %s |" % state, print_state_trans)
+                        print_msg("| IDLE | MAC has DATA to Tx | %s |" % state, node, print_state_trans)
                     elif reply_up == "BEACON":
                         beaconing = True
                         state = "TRANSMITTING_RTS"
-                        print_msg("| IDLE | Transmit BEACON FRAME | WAIT_FOR_NAV |", print_state_trans)
+                        print_msg("| IDLE | Transmit BEACON FRAME | WAIT_FOR_NAV |", node, print_state_trans)
                     elif reply_up == "NO":
                         # is a CTS?
                         reply_phy2, cts_pkt = mac.read_phy_response(phy_port, "CTS")
@@ -286,24 +295,23 @@ def main():
                             tiempo = cts_pkt["tx_time"] / 1.0e3
                             state = "IDLE"
                             print_msg("[R]-[CTS]-[DA:%s]-[duration:%f]-[IFM:0]" % (
-                                mac.format_mac(cts_pkt["RX_add"]), cts_pkt["txtime"]),
-                                      print_data)
-                            print_msg("| IDLE | CTS captured (update NAV) | %s |" % state, print_state_trans)
+                                mac.format_mac(cts_pkt["RX_add"]), cts_pkt["txtime"]), node, print_data)
+                            print_msg("| IDLE | CTS captured (update NAV) | %s |" % state, node, print_state_trans)
                             NAV = mac.update_nav(time.time(), tiempo, tslot)
 
             if state == "IDLE":
                 time.sleep(tslot)  # Time-slotted MAC
-                print_msg("=> %s (%s)" % (state, time.time()), False)
+                print_msg("=> %s (%s)" % (state, time.time()), node, False)
 
         elif state == "WAIT_FOR_NAV":
             NAV = mac.update_nav(time.time(), NAV, tslot)
             if NAV > 0:
-                print_msg("| WAIT_FOR_NAV | NAV > 0 | WAIT_FOR_NAV |", False)
+                print_msg("| WAIT_FOR_NAV | NAV > 0 | WAIT_FOR_NAV |", node, False)
                 continue
 
             # NAV = 0
             state = "WAIT_FOR_DIFS"
-            print_msg("| WAIT_FOR_NAV | NAV = 0 | %s |" % state, print_state_trans)
+            print_msg("| WAIT_FOR_NAV | NAV = 0 | %s |" % state, node, print_state_trans)
             chan = "FREE"
 
         elif state == "WAIT_FOR_DIFS":
@@ -315,7 +323,7 @@ def main():
             while n_sensing < 2:
                 t_testB = time.time()
                 channel_status, t, sig_power = mac.sense_channel(phy_port)
-                print_msg("Channel is %s (%5.2f dBw)......" % (channel_status, sig_power), print_chan_sense)
+                print_msg("Channel is %s (%5.2f dBw)......" % (channel_status, sig_power), node, print_chan_sense)
                 t_testC = time.time()
                 assert (tslot - (t_testC - t_testB) >= 0), timing_error
                 time.sleep(tslot - (t_testC - t_testB))
@@ -331,27 +339,27 @@ def main():
                 if BO_frozen == "NO" and busy_in_wfd is False and CTS_failed is False:
                     BACKOFF = 0  # Channel IDLE for the first time, BOtimer = 0
                 state = "BACKING_OFF"
-                print_msg("| WAIT_FOR_DIFS | Channel idle | %s |" % state, print_state_trans)
+                print_msg("| WAIT_FOR_DIFS | Channel idle | %s |" % state, node, print_state_trans)
             else:
                 if BO_frozen == "NO" and CTS_failed is False:  # If it is the 1st time, set the CW
                     BACKOFF = mac.retry(TX_attempts, CW_min)
-                    print "Backoff window is......", BACKOFF
+                    print_msg("Backoff window is...... %d" % BACKOFF, node)
                     TX_attempts = TX_attempts + 1
                 state = "IDLE"
                 chan = "FREE"
-                print_msg("| WAIT_FOR_DIFS | Channel busy | %s |" % state, print_state_trans)
+                print_msg("| WAIT_FOR_DIFS | Channel busy | %s |" % state, node, print_state_trans)
 
         elif state == "BACKING_OFF":
             busy_in_wfd = False
 
             if BACKOFF == 0:
                 state = "TRANSMITTING_RTS"
-                print_msg("| BACKING_OFF | Channel idle (CW = %i) | %s |" % (BACKOFF, state), print_state_trans)
+                print_msg("| BACKING_OFF | Channel idle (CW = %i) | %s |" % (BACKOFF, state), node, print_state_trans)
                 continue
 
             tx = time.time()
             channel_status, t, sig_power = mac.sense_channel(phy_port)
-            print_msg("Channel is %s (%5.2f dBw)......" % (channel_status, sig_power), print_chan_sense)
+            print_msg("Channel is %s (%5.2f dBw)......" % (channel_status, sig_power), node, print_chan_sense)
             BACKOFF = BACKOFF - 1
             if channel_status == "FREE":  # Channel idle
                 if BACKOFF == 0:
@@ -362,7 +370,7 @@ def main():
                 BO_frozen = "YES"
                 state = "IDLE"
 
-            print_msg("| BACKING_OFF | Channel busy (CW = %i) | %s |" % (BACKOFF, state), print_state_trans)
+            print_msg("| BACKING_OFF | Channel busy (CW = %i) | %s |" % (BACKOFF, state), node, print_state_trans)
             ty = time.time()
             assert (tslot - (ty - tx) >= 0), timing_error
             time.sleep(tslot - (ty - tx))
@@ -372,10 +380,10 @@ def main():
             if beaconing:  # Transmit a Beacon frame
                 values = {"address2": my_mac, "N_SEQ": N_SEQ, "N_FRAG": 0, "BI": options.BI, "timestamp": time.time()}
                 print_msg("[T]-[BEACON]-[SA:%s]-[BI=%f]-[Seq#:%i]" % (mac.format_mac(my_mac), options.BI, N_SEQ),
-                          print_data)
+                          node, print_data)
 
                 state = "IDLE"
-                print_msg("| TRANSMITTING_RTS | Send BEACON | %s |" % state, print_state_trans)
+                print_msg("| TRANSMITTING_RTS | Send BEACON | %s |" % state, node, print_state_trans)
                 BEACON = mac.generate_pkt("BEACON", t_sym, encoding, values)
                 packet_BEACON = mac.create_packet("PKT", BEACON)
                 mac.send_wo_response(packet_BEACON, phy_port)
@@ -405,9 +413,10 @@ def main():
                     packet_RTS = mac.create_packet("PKT", RTS)
                     mac.send_wo_response(packet_RTS, phy_port)
                     state = "WAITING_FOR_CTS"
-                    print_msg("| TRANSMITTING_RTS | (PAYLOAD > RTS_Th) Send RTS | %s |" % state, print_state_trans)
+                    print_msg("| TRANSMITTING_RTS | (PAYLOAD > RTS_Th) Send RTS | %s |" % state, node,
+                              print_state_trans)
                     print_msg("[T]-[RTS]-[SA:%s]-[DA=%s]-[duration:%i]" % (
-                        mac.format_mac(my_mac), mac.format_mac(mac_ta), duration), print_data)
+                        mac.format_mac(my_mac), mac.format_mac(mac_ta), duration), node, print_data)
 
                     WFC_first_time = 1  # First time in WAITING_FOR_CTS state
                 else:
@@ -416,7 +425,8 @@ def main():
                         fail_tx = False
                     first_tx = False
                     state = "TRANSMITTING_UNICAST"
-                    print_msg("| TRANSMITTING_RTS | (PAYLOAD < RTS_Th) Send DATA | %s |" % state, print_state_trans)
+                    print_msg("| TRANSMITTING_RTS | (PAYLOAD < RTS_Th) Send DATA | %s |" % state, node,
+                              print_state_trans)
 
             else:  # RTS is disabled
                 if first_tx:
@@ -424,7 +434,7 @@ def main():
                     fail_tx = False
                     first_tx = False
                 state = "TRANSMITTING_UNICAST"
-                print_msg("| TRANSMITTING_RTS | (RTS OFF) Send DATA | %s |" % state, print_state_trans)
+                print_msg("| TRANSMITTING_RTS | (RTS OFF) Send DATA | %s |" % state, node, print_state_trans)
 
         elif state == "TRANSMITTING_UNICAST":
             '''
@@ -434,7 +444,7 @@ def main():
             '''
             if len(PAYLOAD) > dot11FragmentationTh:
                 state = "TRANSMITTING_FRAGMENTED_PACKET"
-                print_msg("| TRANSMITTING_UNICAST | Send Fragmented Data | %s |" % state, print_state_trans)
+                print_msg("| TRANSMITTING_UNICAST | Send Fragmented Data | %s |" % state, node, print_state_trans)
                 first_time_fg = True
                 WF_ACK_FG_first_time = True
             else:
@@ -449,10 +459,10 @@ def main():
                     packet = mac.generate_pkt("DATA_RETX", t_sym, encoding, values)
                     tx_type = "Resend"
 
-                print_msg("| TRANSMITTING_UNICAST | %s DATA | %s |" % (tx_type, state), print_state_trans)
+                print_msg("| TRANSMITTING_UNICAST | %s DATA | %s |" % (tx_type, state), node, print_state_trans)
                 print_msg("[T]-[DATA]-[DA:%s]-[SA:%s]-[MF:0]-[Seq#:%i]-[""%s""]%s" % (
                     mac.format_mac(dest_mac), mac.format_mac(my_mac), N_SEQ, PAYLOAD,
-                    "-[RETX]" if tx_type == "Resend" else ""), print_data)
+                    "-[RETX]" if tx_type == "Resend" else ""), node, print_data)
 
                 N_SEQ = mac.next_seq_num(N_SEQ)
                 N_FRAG = 0
@@ -490,18 +500,18 @@ def main():
                     CTS_fin = 1
                     TX_attempts = 0
                     CTS_failed = False
-                    print_msg("| WAITING_FOR_CTS | CTS received | %s |" % state, print_state_trans)
+                    print_msg("| WAITING_FOR_CTS | CTS received | %s |" % state, node, print_state_trans)
                     print_msg("[R]-[CTS]-[RA: %s]-[duration: %f]-[IFM:1]" % (
-                        mac.format_mac(cts_pkt["RX_add"]), cts_pkt["tx_time"]), print_data)
+                        mac.format_mac(cts_pkt["RX_add"]), cts_pkt["tx_time"]), node, print_data)
                 else:
                     CTS_fin = 1  # CTS captured! Transmission aborted to avoid a collision
                     print_msg("[R]-[CTS]-[RA:%s]-[duration:%f]-[IFM:0]" % (
-                        mac.format_mac(cts_pkt["RX_add"]), cts_pkt["tx_time"]), print_data)
+                        mac.format_mac(cts_pkt["RX_add"]), cts_pkt["tx_time"]), node, print_data)
                     state = "IDLE"
                     nuevo_NAV = cts_pkt["tx_time"] / 1e3
                     NAV = mac.update_nav(time.time(), nuevo_NAV, tslot)
                     print_msg("| WAITING_FOR_CTS | CTS captured (Update NAV = %f) | %s |" % (NAV, state),
-                              print_state_trans)
+                              node, print_state_trans)
 
             else:
                 state = "WAITING_FOR_CTS"
@@ -518,7 +528,7 @@ def main():
                     TX_attempts = TX_attempts + 1
                     BACKOFF = mac.retry(TX_attempts, CW_min)
                     state = "IDLE"  # Timer expired and CTS hasn't been received
-                    print_msg("| WAITING_FOR_CTS | CTS not received | %s |" % state, print_state_trans)
+                    print_msg("| WAITING_FOR_CTS | CTS not received | %s |" % state, node, print_state_trans)
                     CTS_failed = True
 
         elif state == "TRANSMITTING_FRAGMENTED_PACKET":
@@ -539,9 +549,9 @@ def main():
                 pkt = mac.create_packet("PKT", packet)
 
                 state = "WAIT_ACK_FRAGMENTED"
-                print_msg("| TRANSMITTING_FRAGMENTED_PACKET | Send DATA FRAG | %s |" % state, print_state_trans)
+                print_msg("| TRANSMITTING_FRAGMENTED_PACKET | Send DATA FRAG | %s |" % state, node, print_state_trans)
                 print_msg("[T]-[FRAGMENTED DATA]-[DA:%s]-[SA:%s]-[MF:1]-[Seq#:%i]-[Frag#:%i]-[""%s""]" % (
-                    mac.format_mac(dest_mac), mac.format_mac(my_mac), N_SEQ, N_FRAG, payload_tmp), print_data)
+                    mac.format_mac(dest_mac), mac.format_mac(my_mac), N_SEQ, N_FRAG, payload_tmp), node, print_data)
                 mac.send_wo_response(pkt, phy_port)
                 fragments.pop(0)  # FIXME Retransmission for Fragmented packets is required
                 fin_wait_ack_fragmented = False
@@ -555,9 +565,9 @@ def main():
                 N_FRAG = 0
                 state = "WAIT_ACK_FRAGMENTED"
                 print_msg("| TRANSMITTING_FRAGMENTED_PACKET | Send DATA FRAG (last fragment) | %s |" % state,
-                          print_state_trans)
+                          node, print_state_trans)
                 print_msg("[T]-[DATA]-[DA:%s]-[SA:%s]-[MF:0]-[Seq#:%i]-[""%s""]" % (
-                    mac.format_mac(dest_mac), mac.format_mac(my_mac), N_SEQ, payload_tmp), print_data)
+                    mac.format_mac(dest_mac), mac.format_mac(my_mac), N_SEQ, payload_tmp), node, print_data)
                 packet = mac.generate_pkt("DATA", t_sym, encoding, values)
                 pkt = mac.create_packet("PKT", packet)
                 mac.send_wo_response(pkt, phy_port)
@@ -570,15 +580,16 @@ def main():
             no_packet, cts_pkt = mac.read_phy_response(phy_port, "ACK")
             if no_packet == "YES":  # ACK addressed to this station
                 x = cts_pkt
-                print_msg("[R]-[ACK]-[DA:%s]-[IFM:1]" % mac.format_mac(x["RX_add"]), print_data)
+                print_msg("[R]-[ACK]-[DA:%s]-[IFM:1]" % mac.format_mac(x["RX_add"]), node, print_data)
                 if fin_wait_ack_fragmented:  # Last fragment sent
                     state = "IDLE"
-                    print_msg("| WAIT_ACK_FRAGMENTED | All fragments acknowledged  | %s |" % state, print_state_trans)
+                    print_msg("| WAIT_ACK_FRAGMENTED | All fragments acknowledged  | %s |" % state, node,
+                              print_state_trans)
                     mac.remove_ul_buff_packet(mac_port)  # Remove the packet from upper layers
                     first_tx = True
                 else:
                     state = "TRANSMITTING_FRAGMENTED_PACKET"
-                    print_msg("| WAIT_ACK_FRAGMENTED | ACK received | %s |" % state, print_state_trans)
+                    print_msg("| WAIT_ACK_FRAGMENTED | ACK received | %s |" % state, node, print_state_trans)
                 BACKOFF = 0
                 WF_ACK_FG_first_time = 1
                 ACK_FG_fin = 1
@@ -595,10 +606,10 @@ def main():
             if ACK_FG_fin == 0:
                 if T_ACK > 0:
                     state = "WAIT_ACK_FRAGMENTED"
-                    print_msg("| WAIT_ACK_FRAGMENTED | ACK not received yet | %s |" % state, print_state_trans)
+                    print_msg("| WAIT_ACK_FRAGMENTED | ACK not received yet | %s |" % state, node, print_state_trans)
                 else:
                     state = "IDLE"
-                    print("| WAIT_ACK_FRAGMENTED | ACK not received | %s |" % state, print_state_trans)
+                    print_msg("| WAIT_ACK_FRAGMENTED | ACK not received | %s |" % state, node, print_state_trans)
                     mac.remove_ul_buff_packet(mac_port)  # ACK not received within the Waiting_for_ack interval
                     first_tx = True
 
@@ -609,7 +620,7 @@ def main():
             no_packet, cts_pkt = mac.read_phy_response(phy_port, "ACK")
             if no_packet == "YES":
                 x = cts_pkt
-                print_msg("[R]-[ACK]-[DA:%s]-[IFM:1]" % mac.format_mac(x["RX_add"]), print_data)
+                print_msg("[R]-[ACK]-[DA:%s]-[IFM:1]" % mac.format_mac(x["RX_add"]), node, print_data)
                 '''
                 #============================================================
                 # /TEST/ UNCOMMENT TO CHECK RTS/CTS FUNCTIONALITY
@@ -625,7 +636,7 @@ def main():
                 '''
                 state = "IDLE"
                 print_msg("| WAITING_FOR_ACK | ACK received | %s | (remove one packet from buffer)" % state,
-                          print_state_trans)
+                          node, print_state_trans)
                 BACKOFF = 0
                 WF_ACK_first_time = True
                 mac.remove_ul_buff_packet(mac_port)  # Packet acknowledged, remove from upper layers
@@ -633,7 +644,7 @@ def main():
                 if rate_control_enabled:
                     encoding_prev = encoding
                     encoding = R.data_sel(encoding, True)
-                    print_msg("Rate adaptation %d -> %d" % (encoding_prev, encoding), print_rate)
+                    print_msg("Rate adaptation %d -> %d" % (encoding_prev, encoding), node, print_rate)
 
             else:
                 WF_ACK_first_time = False
@@ -649,7 +660,7 @@ def main():
 
             if T_ACK > 0:  # time window to receive ACK is not closed
                 state = "WAITING_FOR_ACK"
-                print_msg("| WAITING_FOR_ACK | ACK not received yet | %s |" % state, False)
+                print_msg("| WAITING_FOR_ACK | ACK not received yet | %s |" % state, node, False)
                 continue
 
             # Doesn't received ACK during the time window, Reset CW to CWmin and go to IDLE
@@ -661,25 +672,25 @@ def main():
                     mac.remove_ul_buff_packet(mac_port)
                     first_tx = True
                     print_msg("| WAITING_FOR_ACK | Remove packet from upper layers after retries | %s |" % state,
-                              print_state_trans)
+                              node, print_state_trans)
                     N_FRAG = 0
                     fail_tx = False
 
                 else:
                     print_msg("| WAITING_FOR_ACK | ACK not received (retries left = %i) | %s |" % (
-                        retx_retries, state), print_state_trans)
+                        retx_retries, state), node, print_state_trans)
                     fail_tx = True
 
             else:  # Retransmission is disabled
                 print_msg("| WAITING_FOR_ACK | Remove packet from upper layers (ReTX disabled) | %s |" % state,
-                          print_state_trans)
+                          node, print_state_trans)
                 mac.remove_ul_buff_packet(mac_port)  # No Re-TX!
                 first_tx = True
 
             if rate_control_enabled:  # Adjust the data rate
                 encoding_prev = encoding
                 encoding = R.data_sel(encoding, False)  # transmission fails
-                print_msg("Rate adaptation %d -> %d" % (encoding_prev, encoding), print_rate)
+                print_msg("Rate adaptation %d -> %d" % (encoding_prev, encoding), node, print_rate)
 
         elif state == "TRANSMITTING_CTS":
             '''
@@ -691,7 +702,7 @@ def main():
             NAV = mac.update_nav(time.time(), NAV, tslot)
             if NAV > 0:
                 state = "TRANSMITTING_CTS"
-                print_msg("| TRANSMITTING_CTS | NAV > 0 | %s |" % state, print_state_trans)
+                print_msg("| TRANSMITTING_CTS | NAV > 0 | %s |" % state, node, print_state_trans)
             else:
                 duration = RTS_duration - (2 * T_cts) / 10 - SIFS
                 mac_ra = dest_mac
@@ -699,8 +710,8 @@ def main():
                 CTS = mac.generate_pkt("CTS", t_sym, encoding_ctrl_frame, values)
                 packet_CTS = mac.create_packet("PKT", CTS)
                 state = "WAITING_FOR_DATA"
-                print_msg("| TRANSMITTING_CTS | CTS sent | %s |" % state, print_state_trans)
-                print_msg("[T]-[CTS]-[DA:%s]-[duration=%f]" % (mac.format_mac(mac_ra), duration), print_data)
+                print_msg("| TRANSMITTING_CTS | CTS sent | %s |" % state, node, print_state_trans)
+                print_msg("[T]-[CTS]-[DA:%s]-[duration=%f]" % (mac.format_mac(mac_ra), duration), node, print_data)
                 mac.send_wo_response(packet_CTS, phy_port)
                 WF_DATA_first_time = 1
 
@@ -732,9 +743,10 @@ def main():
                 if x["MF"] == 0:  # More Fragments = 0
                     if fragmenting == 0:  # Not a fragmented packet
                         state = "TRANSMITTING_ACK"
-                        print_msg("| WAITING_FOR_DATA | DATA received | %s |" % state, print_state_trans)
+                        print_msg("| WAITING_FOR_DATA | DATA received | %s |" % state, node, print_state_trans)
                         print_msg("[R]-[DATA]-[DA:%s]-[SA:%s]-[MF:0]-[IFM:1]-[""%s""]" % (
-                            mac.format_mac(x["mac_add1"]), mac.format_mac(x["mac_add2"]), x["PAYLOAD"]), print_data)
+                            mac.format_mac(x["mac_add1"]), mac.format_mac(x["mac_add2"]), x["PAYLOAD"]), node,
+                                  print_data)
 
                         WF_DATA_first_time = 1
                         DATA_ok = 1
@@ -746,13 +758,13 @@ def main():
                         print_msg(
                             "[R]-[FRAGMENTED DATA]-[DA:%s]-[SA:%s]-[MF:0]-[Seq#:%i]-[Frag#:%i]-[IFM:1]-[""%s""]" % (
                                 mac.format_mac(x["mac_add2"]), mac.format_mac(my_mac), x["N_SEQ"], x["N_FRAG"],
-                                x["PAYLOAD"]), print_data)
+                                x["PAYLOAD"]), node, print_data)
                         test_seq = x["N_FRAG"] + 1 - frag_count
                         if test_seq == 0:
                             dato_leido = data_temp_reass + x["PAYLOAD"]
                             state = "TRANSMITTING_ACK"
                             print_msg("| WAITING_FOR_DATA | DATA_FRAG received  (MF = 0)| %s |" % state,
-                                      print_state_trans)
+                                      node, print_state_trans)
                             WF_DATA_first_time = 1
                             frag_count = 0
                             DATA_ok = 1
@@ -762,7 +774,7 @@ def main():
                             state = "IDLE"  # TODO: state mismatch
                             print_msg(
                                 "| WAITING_FOR_DATA | Error: one or more fragments not received | TRANSMITTING_ACK |",
-                                print_state_trans)
+                                node, print_state_trans)
                             WF_DATA_first_time = 1
                             DATA_ok = 0
                             frag_count = 0
@@ -770,10 +782,10 @@ def main():
                 else:  # More Fragments = 1. It's a fragment
                     state = "TX_ACK_FG"  # TODO: state mismatch
                     print_msg("| WAITING_FOR_DATA | DATA_FRAG received  (MF = 1)| TRANSMITTING_ACK |",
-                              print_state_trans)
+                              node, print_state_trans)
                     print_msg("[R]-[FRAGMENTED DATA]-[DA:%s]-[SA:%s]-[MF:1]-[Seq#:%i]-[Frag#:%i]-[IFM:1]-[""%s""]" % (
                         mac.format_mac(x["mac_add2"]), mac.format_mac(my_mac), x["N_SEQ"], x["N_FRAG"], x["PAYLOAD"]),
-                              print_data)
+                              node, print_data)
 
                     fragmenting = 1
                     frag_count += 1
@@ -790,19 +802,19 @@ def main():
             if DATA_ok == 0:
                 if T_DATA > 0:
                     state = "WAITING_FOR_DATA"
-                    print_msg("| WAITING_FOR_DATA | DATA not received yet | %s |" % state, print_state_trans)
+                    print_msg("| WAITING_FOR_DATA | DATA not received yet | %s |" % state, node, print_state_trans)
                 else:
                     # DATA didn't arrive, go to IDLE
                     state = "IDLE"
-                    print_msg("| WAITING_FOR_DATA | DATA not received  | %s |" % state, print_state_trans)
+                    print_msg("| WAITING_FOR_DATA | DATA not received  | %s |" % state, node, print_state_trans)
                     DATA_ok = 1
 
         elif state == "TX_ACK_FG":
             values = {"duration": 0, "mac_ra": ack_addr,
                       "timestamp": time.time()}  # ack_addr copied from the previous Data packet
             state = "WAITING_FOR_DATA"
-            print_msg("| TX_ACK_FG | ACK sent | %s |" % state, print_state_trans)
-            print_msg("[T]-[ACK]-[DA:%s]" % mac.format_mac(ack_addr), print_data)
+            print_msg("| TX_ACK_FG | ACK sent | %s |" % state, node, print_state_trans)
+            print_msg("[T]-[ACK]-[DA:%s]" % mac.format_mac(ack_addr), node, print_data)
             ACK = mac.generate_pkt("ACK", t_sym, encoding_ctrl_frame, values)
             packet_ACK = mac.create_packet("PKT", ACK)
             mac.send_wo_response(packet_ACK, phy_port)
@@ -811,8 +823,8 @@ def main():
             values = {"duration": 0, "mac_ra": ack_addr,
                       "timestamp": time.time()}  # ack_addr copied from the previous Data packet
             state = "IDLE"
-            print_msg("| TRANSMITTING_ACK | ACK sent | %s |" % state, print_state_trans)
-            print_msg("[T]-[ACK]-[DA:%s]" % mac.format_mac(ack_addr), print_data)
+            print_msg("| TRANSMITTING_ACK | ACK sent | %s |" % state, node, print_state_trans)
+            print_msg("[T]-[ACK]-[DA:%s]" % mac.format_mac(ack_addr), node, print_data)
             ACK = mac.generate_pkt("ACK", t_sym, encoding_ctrl_frame, values)
             packet_ACK = mac.create_packet("PKT", ACK)
             mac.send_wo_response(packet_ACK, phy_port)
