@@ -65,7 +65,7 @@ def print_msg(msg, node, log=True):
     :return: none
     """
     if log:
-        print "[%d] %s" % (node, msg)
+        print("[%d] %s" % (node, msg))
 
 
 # Finite State Machine MAC main

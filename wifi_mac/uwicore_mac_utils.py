@@ -85,7 +85,7 @@ def parse_mac(pkt, log=False):
     header = info = ""
 
     if log:
-        print "The content of pkt: ", pkt
+        print("The content of pkt: ", pkt)
 
     if pkt[0] == chr(0x80):
         header = "BEACON"
@@ -212,7 +212,8 @@ def format_mac(mac_str):
     :param mac_str: string of mac address (6-char-long)
     :return: human-readable MAC address xx:xx:xx:xx:xx:xx
     """
-    return ':'.join(c.encode('hex') for c in mac_str)
+    # return ':'.join(c.encode('hex') for c in mac_str)
+    return ':'.join(format(ord(b), '02x') for b in mac_str)
 
 
 def cal_sym_duration(samp_rate):
@@ -526,7 +527,7 @@ def _cal_beacon_interval(time_tick):
     Calculates the Beacon Interval value in packed binary string format
     """
     if time_tick > 67108:
-        print "ERROR, Beacon interval > BI MAX (67108)"
+        print("ERROR, Beacon interval > BI MAX (67108)")
         BI = chr(0xff) + chr(0xff)
     else:
         time_tick = int(time_tick / 1024e-6) + 1

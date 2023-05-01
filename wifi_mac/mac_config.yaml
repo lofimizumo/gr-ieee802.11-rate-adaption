@@ -1,0 +1,11 @@
+PHYport: 8013
+MACport: 8001
+encoding: 2
+beta: 1000
+dest_node: 1
+time_slot: 9e-6
+BI: 1
+SIFS: 16e-6
+retx_max: 4
+RTS: false
+rate_control: aarf

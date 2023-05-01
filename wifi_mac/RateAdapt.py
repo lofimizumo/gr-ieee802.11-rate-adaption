@@ -30,13 +30,13 @@ class MinstrelController:
         self.idx = encoding_init  # current data rate
         self.log = log
 
-        print "======== Minstrel algorithm ======"
-        print "Throughput table", self.data_rate_table
-        print "No. of supporting data rates:", self.SUPPORTED_DATA_RATES
-        print "Max retry count:", self.MAX_RETRY_COUNT
-        print "SAMPLE_RATIO:", self.SAMPLE_RATIO
-        print "Initial data rate: %d Mbps" % self.data_rate_table[self.idx]
-        print "=================================="
+        print("======== Minstrel algorithm ======")
+        print("Throughput table", self.data_rate_table)
+        print("No. of supporting data rates:", self.SUPPORTED_DATA_RATES)
+        print("Max retry count:", self.MAX_RETRY_COUNT)
+        print("SAMPLE_RATIO:", self.SAMPLE_RATIO)
+        print("Initial data rate: %d Mbps" % self.data_rate_table[self.idx])
+        print("==================================")
 
         # Variables
         self.SAMPLE_COLUMNS = 10  # number of rows in sample table
@@ -160,48 +160,48 @@ class MinstrelController:
 
     def show_rate_table(self):
         if self.log:
-            print "========== normal_tp_rate_table =========="
+            print("========== normal_tp_rate_table ==========")
             print_matrix(self.normal_tp_rate_table)
-            print "======== lookaround_tp_rate_table ========"
+            print("======== lookaround_tp_rate_table ========")
             print_matrix(self.lookaround_tp_rate_table)
-            print "============= rate statistic ============"
+            print("============= rate statistic ============")
             print_matrix(self.rate_statistic)
-            print "=========================================="
+            print("==========================================")
 
     def show_sample_table(self):
         if self.log:
-            print "============= sample table ==============="
+            print("============= sample table ===============")
             print_matrix(self.sample_table)
 
     def show_sample_statistic(self):
         if self.log:
-            print "=========== sample_statistic ============"
+            print("=========== sample_statistic ============")
             print_matrix(self.sample_statistic)
 
     def test(self):
         d = 0  # initial data rate
         for i in range(20):
             d = self.data_sel(d, True)
-            print self.sample_statistic
-            print d
+            print(self.sample_statistic)
+            print(d)
 
         d = self.data_sel(d, False)
-        print self.sample_statistic
-        print d
+        print(self.sample_statistic)
+        print(d)
 
         for i in range(650):
             d = self.data_sel(d, False)
-            print self.sample_statistic
-            print d
+            print(self.sample_statistic)
+            print(d)
 
         for i in range(300):
             d = self.data_sel(d, True)
-            print self.sample_statistic
-            print d
+            print(self.sample_statistic)
+            print(d)
 
         d = self.data_sel(d, True)
-        print self.sample_statistic
-        print d
+        print(self.sample_statistic)
+        print(d)
 
 
 class AarfController:
@@ -213,12 +213,12 @@ class AarfController:
         self.idx = encoding_init
         self.log = log
 
-        print "=================================="
-        print "AARF algorithm is selected"
-        print "No. of supporting data rates:", self.SUPPORTED_DATA_RATES
-        print "Initial data rate index:", self.idx
-        print "AARF_N:", self.AARF_N
-        print "=================================="
+        print("==================================")
+        print("AARF algorithm is selected")
+        print("No. of supporting data rates:", self.SUPPORTED_DATA_RATES)
+        print("Initial data rate index:", self.idx)
+        print("AARF_N:", self.AARF_N)
+        print("==================================")
 
         self.just_increased = False
 
@@ -234,9 +234,9 @@ class AarfController:
 
     def show_aarf_rate(self):
         if self.log:
-            print "============== AARF_rate ==============="
+            print("============== AARF_rate ===============")
             print_matrix(self.AARF_rate)
-            print "========================================"
+            print("========================================")
 
     def aarf_update_stats(self, rate, success):
         """
@@ -288,33 +288,33 @@ class AarfController:
         for i in range(20):
             d = self.data_sel(d, True)
             self.show_aarf_rate()
-            print d
+            print(d)
 
         d = self.data_sel(d, False)
         self.show_aarf_rate()
-        print d
+        print(d)
 
         for i in range(650):
             d = self.data_sel(d, False)
             self.show_aarf_rate()
-            print d
+            print(d)
 
         for i in range(300):
             d = self.data_sel(d, True)
             self.show_aarf_rate()
-            print d
+            print(d)
 
         d = self.data_sel(d, True)
         self.show_aarf_rate()
-        print d
+        print(d)
 
 
 def print_matrix(m, log=True):
     if log:
         if type(m[0]) == int:  # x is a 1-D array
-            print m
+            print(m)
         elif type(m[0]) == list:  # x is a 2-D array
             for i in range(len(m)):
-                print m[i]
+                print(m[i])
         else:
-            print "Not a 1-D or 2-D array"
+            print("Not a 1-D or 2-D array")

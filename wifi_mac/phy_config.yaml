@@ -1,0 +1,12 @@
+freq: 5.210e9
+lo_offset: 0
+samp_rate: 20e6
+usrp_ip: ''
+rx_gain: 0.15
+chan_est: 0
+encoding: 0
+tx_gain: 0.75
+node: 1
+PHYRXport: 8513
+PHYport: 8013
+verbose: false

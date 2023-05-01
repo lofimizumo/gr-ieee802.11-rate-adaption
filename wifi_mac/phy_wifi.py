@@ -18,7 +18,7 @@ if __name__ == '__main__':
             x11 = ctypes.cdll.LoadLibrary('libX11.so')
             x11.XInitThreads()
         except:
-            print "Warning: failed to XInitThreads()"
+            print("Warning: failed to XInitThreads()")
 
 import os
 import socket
@@ -26,18 +26,18 @@ import sys
 import threading
 import foo
 import ieee802_11
+import yaml
+from PyQt5 import Qt,QtWidgets
+from PyQt5.QtCore import pyqtSlot
 import sip
 import time
 import uwicore_mac_utils as mac
 import uwicore_mpif as plcp
-from optparse import OptionParser
-from Queue import Queue
+from collections import deque
 from gnuradio.eng_option import eng_option
 
 sys.path.append(os.environ.get('GRC_HIER_PATH', os.path.expanduser('~/.grc_gnuradio')))
 
-from PyQt4 import Qt
-from PyQt4.QtCore import pyqtSlot
 from gnuradio import blocks
 from gnuradio import gr
 from gnuradio import uhd
@@ -46,6 +46,10 @@ from wifi_phy_hier import wifi_phy_hier  # grc-generated hier_block
 
 from gnuradio import qtgui
 
+def load_config(config_file):
+    with open(config_file, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
 
 def print_msg(msg, node, log=True):
     """
@@ -56,7 +60,7 @@ def print_msg(msg, node, log=True):
     :return: none
     """
     if log:
-        print "[%d] %s" % (node, msg)
+        print("[%d] %s" % (node, msg))
 
 
 class wifi_transceiver(gr.top_block, Qt.QWidget):
@@ -82,19 +86,21 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
         self.top_layout.addLayout(self.top_grid_layout)
 
         self.settings = Qt.QSettings("GNU Radio", "wifi_transceiver")
-        self.restoreGeometry(self.settings.value("geometry").toByteArray())
+        if self.settings.value("geometry") is not None:
+            self.restoreGeometry(self.settings.value("geometry").toByteArray())
+
 
         ##################################################
         # Variables
         ##################################################
-        self.tx_gain = tx_gain = options.tx_gain
-        self.samp_rate = samp_rate = options.samp_rate
-        self.rx_gain = rx_gain = options.rx_gain
-        self.lo_offset = lo_offset = options.lo_offset
-        self.freq = freq = options.freq
-        self.encoding = encoding = options.encoding
-        self.chan_est = chan_est = options.chan_est
-        self.usrp_ip = options.usrp_ip
+        self.tx_gain = tx_gain = options['tx_gain']
+        self.samp_rate = samp_rate = float(options['samp_rate'])
+        self.rx_gain = rx_gain = options['rx_gain']
+        self.lo_offset = lo_offset = options['lo_offset']
+        self.freq = freq = float(options['freq'])
+        self.encoding = encoding = options['encoding']
+        self.chan_est = chan_est = options['chan_est']
+        self.usrp_ip = options['usrp_ip']
 
         ##################################################
         # Blocks
@@ -365,7 +371,7 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
         self.blocks_pdu_to_tagged_stream_0_0 = blocks.pdu_to_tagged_stream(blocks.complex_t, 'packet_len')
         self.blocks_multiply_const_vxx_0 = blocks.multiply_const_vcc((0.6,))
         (self.blocks_multiply_const_vxx_0).set_min_output_buffer(100000)
-        self.blocks_socket_pdu_0 = blocks.socket_pdu("TCP_CLIENT", hostname, str(options.PHYRXport))
+        self.blocks_socket_pdu_0 = blocks.socket_pdu("TCP_CLIENT", hostname, str(options['PHYRXport']))
         self.msg_sink = blocks.message_sink(4, msgq, True)  # for CCA
 
         ##################################################
@@ -606,14 +612,14 @@ class proc_mac_request(threading.Thread):
 
         self.msgq = msgq
         self.wifi_transceiver = wifi_transceiver
-        self.node = options.node
-        self.samp_rate = options.samp_rate
-        self.verbose = options.verbose
+        self.node = options['node']
+        self.samp_rate = options['samp_rate']
+        self.verbose = options['verbose']
 
         # Stream sockets to ensure no packet loss during PHY<-->MAC communication
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind((socket.gethostname(), options.PHYport))
+        self.server.bind((socket.gethostname(), options['PHYport']))
         self.server.listen(1)  # PHY is ready to attend MAC requests
 
         self.running = True
@@ -743,97 +749,66 @@ class proc_mac_request(threading.Thread):
         self.server.close()
 
 
-data = Queue()
-ack = Queue()
-rts = Queue()
-cts = Queue()
-bcn = Queue()
-other = Queue()
+data = deque()
+ack = deque()
+rts = deque()
+cts = deque()
+bcn = deque()
+other = deque()
 
+class Phy(threading.Thread):
+    def __init__(self, options):
+        threading.Thread.__init__(self)
+        self.options = options
+        self.options['samp_rate'] = float(self.options['samp_rate'])
+        self.options['freq'] = float(self.options['freq'])
 
-def main(top_block_cls=wifi_transceiver, options=None):
-    from distutils.version import StrictVersion
-    if StrictVersion(Qt.qVersion()) >= StrictVersion("4.5.0"):
-        style = gr.prefs().get_string('qtgui', 'style', 'raster')
-        Qt.QApplication.setGraphicsSystem(style)
-    qapp = Qt.QApplication(sys.argv)
+    def print_msg(self, msg, node, log=True):
+        """
+        Print debug info
+        :param msg: message to print
+        :param node: node ID as prefix
+        :param log: print flag
+        :return: none
+        """
+        if log:
+            print("[%d] %s" % (node, msg))
 
-    parser = OptionParser(option_class=eng_option, usage="%prog: [options]")
-    parser.add_option("-f", "--freq", type="eng_float",
-                      default=5.210e9, help="set USRP2 carrier frequency, [default=%default]", )
-    parser.add_option("-o", "--lo_offset", type="eng_float", default=0,
-                      help="set USRP2 lo frequency offset, [default=%default]")
-    parser.add_option("-w", "--samp_rate", type="eng_float", default=20e6, help="set bandwidth [default=%default]\
-                        20 MHz -> 802.11a/g, OFDM-symbol duration=4us,\
-                        10 MHz -> 802.11p, OFDM-symbol duration=8us")
-    parser.add_option("-a", "--usrp_ip", type="string", default="",
-                      help="USRP ip address [default=%default]")
-    parser.add_option("-g", "--rx_gain", type="eng_float", default=0.15,
-                      help="set USRP2 Rx GAIN in [dB] [default=%default]")
-    parser.add_option("-e", "--chan_est", type="int", default=ieee802_11.LS,
-                      help="Equalizer algorithm [default=%default]\
-                        0 -> LS, \
-                        1 -> LMS, \
-                        2 -> COMB, \
-                        3 -> STA")
-    parser.add_option("", "--encoding", type="int", default=0,
-                      help="set OFDM data rate, [default=%default]\
-                        0 -> 6 (3) Mbit/s (BPSK r=0.5), \
-                        1 -> 9 (4.5) Mbit/s (BPSK r=0.75), \
-                        2 -> 12 (6) Mbit/s (QPSK r=0.5), \
-                        3 -> 18 (9) Mbit/s (QPSK r=0.75), \
-                        4 -> 24 (12) Mbit/s (QAM16 r=0.5), \
-                        5 -> 36 (18) Mbit/s (QAM16 r=0.75), \
-                        6 -> 48 (24) Mbit/s (QAM64 r=0.66), \
-                        7 -> 54 (27) Mbit/s (QAM64 r=0.75)")
-    parser.add_option("-G", "--tx_gain", type="eng_float", default=0.75,
-                      help="set USRP2 Tx GAIN in [dB] [default=%default]")
-    parser.add_option("-n", "--node", type="int", default=1, help="USRP2 node [default=%default]")
-    parser.add_option("", "--PHYRXport", type="int", default=8513,
-                      help="Socket port for PHY internal RX use [default=%default]")
-    parser.add_option("", "--PHYport", type="int", default=8013,
-                      help="Socket port for MAC <-> PHY communication [default=%default]")
-    parser.add_option('-v', "--verbose", action="store_true", default=False,
-                      help="Print timing information, [default=%default]")
+    def run(self, top_block_cls=wifi_transceiver):
+        qapp = QtWidgets.QApplication(sys.argv)
 
-    (options, args) = parser.parse_args()
+        usrp_ip = self.options['usrp_ip']
+        if "" != usrp_ip and not usrp_ip.startswith("addr="):  # USRP address, if specified, must start with "addr="
+            self.options['usrp_ip'] = "addr=%s" % usrp_ip
 
-    usrp_ip = options.usrp_ip
-    if "" != usrp_ip and not usrp_ip.startswith("addr="):  # USRP address, if specified, must start with "addr="
-        options.usrp_ip = "addr=%s" % usrp_ip
+        assert self.options['samp_rate'] in [10e6, 20e6], "Incorrect sample_rate. [10 or 20 MHz]"
 
-    assert options.samp_rate in [10e6, 20e6], "Incorrect sample_rate. [10 or 20 MHz]"
+        my_mac = mac.assign_mac(self.options['node'])  # Assign the MAC address of the node
 
-    my_mac = mac.assign_mac(options.node)  # Assign the MAC address of the node
+        print_msg("-------------------------", self.options['node'])
+        print_msg("... PHY layer running ...", self.options['node'])
+        print_msg(" (Ctrl + C) to exit", self.options['node'])
+        print_msg("Node %d - %s" % (self.options['node'], mac.format_mac(my_mac)),self.options['node'])
+        print_msg("USRP IP: %s" % self.options['usrp_ip'],self.options['node'])
+        print_msg("-------------------------", self.options['node'])
 
-    print_msg("-------------------------", options.node)
-    print_msg("... PHY layer running ...", options.node)
-    print_msg(" (Ctrl + C) to exit", options.node)
-    print_msg("Node %d - %s" % (options.node, mac.format_mac(my_mac)), options.node)
-    print_msg("USRP IP: %s" % options.usrp_ip, options.node)
-    print_msg("-------------------------", options.node)
+        rx_client_thread = rx_client(self.options['PHYRXport'], my_mac,self.options['node'])
+        rx_client_thread.start()
 
-    rx_client_thread = rx_client(options.PHYRXport, my_mac, options.node)
-    rx_client_thread.start()
+        msgq = gr.msg_queue(1)
 
-    msgq = gr.msg_queue(1)
+        tb = top_block_cls(self.options, socket.gethostname(), msgq)
+        tb.start()
+        tb.show()
 
-    tb = top_block_cls(options, socket.gethostname(), msgq)
-    tb.start()
-    tb.show()
+        proc_mac_thread = proc_mac_request(self.options, msgq, tb)
+        proc_mac_thread.start()
 
-    proc_mac_thread = proc_mac_request(options, msgq, tb)
-    proc_mac_thread.start()
+        def quitting():
+            tb.stop()
+            tb.wait()
+            rx_client_thread.stop()
+            proc_mac_thread.stop()
 
-    def quitting():
-        tb.stop()
-        tb.wait()
-        rx_client_thread.stop()
-        proc_mac_thread.stop()
-
-    qapp.connect(qapp, Qt.SIGNAL("aboutToQuit()"), quitting)
-    qapp.exec_()
-
-
-if __name__ == '__main__':
-    main()
+        qapp.connect(qapp, Qt.SIGNAL("aboutToQuit()"), quitting)
+        qapp.exec_()
