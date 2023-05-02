@@ -36,7 +36,7 @@ class UlTraffic:
     then it waits for interval seconds and sends another packet.
     the pickle library is used to serialize the packet.
     '''
-    def __init__(self, MACport=8001, pkt_num=50, interval=0.02):
+    def __init__(self, MACport=8001, pkt_num=50, interval=0.05):
         self.MACport = MACport
         self.pkt_num = pkt_num
         self.interval = interval

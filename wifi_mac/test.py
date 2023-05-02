@@ -17,10 +17,11 @@ if __name__ == '__main__':
     phy.start()
 
     # start MAC
-    # config_mac = "wifi_mac/mac_config.yaml"
-    # config = load_config(config_mac)
-    # mac_wifi_thread = MacWifi(config)
-    # mac_wifi_thread.start()
-    # mac_wifi_thread.join()
-    # buffer_thread.join()
-    # traffic_thread.join()
+    time.sleep(5)
+    config_mac = "wifi_mac/mac_config.yaml"
+    config = load_config(config_mac)
+    mac_wifi_thread = MacWifi(config)
+    mac_wifi_thread.start()
+    mac_wifi_thread.join()
+    buffer_thread.join()
+    traffic_thread.join()

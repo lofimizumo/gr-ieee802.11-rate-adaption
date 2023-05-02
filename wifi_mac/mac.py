@@ -11,6 +11,17 @@ def load_config(config_file):
         config = yaml.safe_load(file)
     return config
 
+def print_msg(msg, node, log=True):
+    """
+    Print debug info
+    :param msg: message to print
+    :param node: node ID as prefix
+    :param log: print flag
+    :return: none
+    """
+    if log:
+        print("[%d] %s" % (node, msg))
+
 class MacWifi(threading.Thread):
     def __init__(self, options):
         threading.Thread.__init__(self)
@@ -18,16 +29,6 @@ class MacWifi(threading.Thread):
         self.options['time_slot'] = float(self.options['time_slot'])
         self.options['SIFS'] = float(self.options['SIFS'])
 
-    def print_msg(self, msg, node, log=True):
-        """
-        Print debug info
-        :param msg: message to print
-        :param node: node ID as prefix
-        :param log: print flag
-        :return: none
-        """
-        if log:
-            print("[%d] %s" % (node, msg))
     def run(self):
     # log info
         print_state_trans = False  # print state transitions

@@ -64,7 +64,7 @@ def print_msg(msg, node, log=True):
 
 
 class wifi_transceiver(gr.top_block, Qt.QWidget):
-    def __init__(self, options, hostname, msgq, wireshark=False):
+    def __init__(self, options, hostname, wireshark=False):
         gr.top_block.__init__(self, "Wifi Transceiver")
         Qt.QWidget.__init__(self)
         self.setWindowTitle("Wifi Transceiver")
@@ -274,7 +274,7 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
 
         self.qtgui_time_sink_x_0.set_y_label('Amplitude', "")
 
-        self.qtgui_time_sink_x_0.enable_tags(-1, True)
+        self.qtgui_time_sink_x_0.enable_tags(True)
         self.qtgui_time_sink_x_0.set_trigger_mode(qtgui.TRIG_MODE_FREE, qtgui.TRIG_SLOPE_POS, 0.0, 0, 0, "")
         self.qtgui_time_sink_x_0.enable_autoscale(False)
         self.qtgui_time_sink_x_0.enable_grid(False)
@@ -297,7 +297,7 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
         alphas = [1.0, 1.0, 1.0, 1.0, 1.0,
                   1.0, 1.0, 1.0, 1.0, 1.0]
 
-        for i in xrange(1):
+        for i in range(1):
             if len(labels[i]) == 0:
                 self.qtgui_time_sink_x_0.set_line_label(i, "Data {0}".format(i))
             else:
@@ -344,7 +344,7 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
                    0, 0, 0, 0, 0]
         alphas = [1.0, 1.0, 1.0, 1.0, 1.0,
                   1.0, 1.0, 1.0, 1.0, 1.0]
-        for i in xrange(1):
+        for i in range(1):
             if len(labels[i]) == 0:
                 self.qtgui_const_sink_x_0.set_line_label(i, "Data {0}".format(i))
             else:
@@ -372,7 +372,10 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
         self.blocks_multiply_const_vxx_0 = blocks.multiply_const_vcc((0.6,))
         (self.blocks_multiply_const_vxx_0).set_min_output_buffer(100000)
         self.blocks_socket_pdu_0 = blocks.socket_pdu("TCP_CLIENT", hostname, str(options['PHYRXport']))
-        self.msg_sink = blocks.message_sink(4, msgq, True)  # for CCA
+        self.probe_signal = blocks.probe_signal_f()
+        
+        self.signal_value = 0
+        self.msg_debug = blocks.message_debug()
 
         ##################################################
         # Connections
@@ -385,8 +388,24 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
         self.connect((self.foo_packet_pad2_0, 0), (self.uhd_usrp_sink_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.wifi_phy_hier_0, 0))
         self.connect((self.wifi_phy_hier_0, 0), (self.blocks_multiply_const_vxx_0, 0))
-        self.connect((self.wifi_phy_hier_0.ieee802_11_moving_average_xx_0, 0), self.msg_sink)  # for CCA
+        self.connect((self.wifi_phy_hier_0.blocks_moving_average_xx_1, 0), (self.probe_signal, 0))
         self.connect((self.wifi_phy_hier_0.blocks_divide_xx_0, 0), (self.qtgui_time_sink_x_0, 0))
+        
+        self.monitor_thread = threading.Thread(target=self.monitor_signal)
+        self.monitor_thread.start()
+
+    def monitor_signal(self):
+        while True:
+            time.sleep(0.1)  # Adjust the sleep time as needed
+            self.signal_value = self.probe_signal.level()
+            
+            # Create a message based on the signal_value, for example:
+            # message = struct.pack('ff', signal_value[0],signal_value[1])
+            # f1, f2 = struct.unpack('ff', message)
+            # msg_pmt = pmt.init_f32vector(2,(signal_value[0],signal_value[1]))  # Convert the message to a pmt
+            
+            # Send the message to the msg_debug block
+            # self.msg_debug.to_basic_block()._post(pmt.intern("store"), msg_pmt)
 
     def closeEvent(self, event):
         self.settings = Qt.QSettings("GNU Radio", "wifi_transceiver")
@@ -477,6 +496,9 @@ class wifi_transceiver(gr.top_block, Qt.QWidget):
             pmt.u8vector_set(p, i, ord(pkt1[i]))
 
         self.wifi_phy_hier_0.ieee802_11_mapper_0.to_basic_block()._post(port, pmt.cons(crc_dict, p))
+    
+    def get_signal_value(self):
+        return self.signal_value
 
 
 class rx_client(threading.Thread):
@@ -602,19 +624,19 @@ class proc_mac_request(threading.Thread):
     """
     Process request from MAC layer
     :param options: TX parameters
-    :param msgq: msg queue that stores the power level (for CCA use)
     :param wifi_transceiver: wifi_transceiver class
     :return: none
     """
 
-    def __init__(self, options, msgq, wifi_transceiver):
+    def __init__(self, options, wifi_transceiver):
         threading.Thread.__init__(self)
 
-        self.msgq = msgq
         self.wifi_transceiver = wifi_transceiver
         self.node = options['node']
         self.samp_rate = options['samp_rate']
         self.verbose = options['verbose']
+        self.msg_debug = blocks.message_debug()
+
 
         # Stream sockets to ensure no packet loss during PHY<-->MAC communication
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -676,41 +698,47 @@ class proc_mac_request(threading.Thread):
             elif "CCA" == arrived_packet["HEADER"]:  # Carrier sensing request
                 print_msg("Mac requests a CCA", self.node, False)
                 t_senseA = time.time()
-                self.msgq.flush()
+                
+                # Check if there's a message available
+                # if self.msg_debug.num_messages() > 0:
+
+                # msg_pmt = self.msg_debug.get_message()
+                # msg_data = pmt.to_python(msg_pmt)  # Convert the message from pmt to a Python object
+                
                 t_reconfig = time.time() - t_senseA
-                m = self.msgq.delete_head()
-                t = m.to_string()
-                msgdata = struct.unpack('%df' % (int(m.arg2()),), t)
-                sensed_power = msgdata[0]
+                signal_value = self.wifi_transceiver.get_signal_value()
+                # Unpack the message data
+                # msgdata = struct.unpack('%df' % (int(len(msg_data) / 4),), msg_data)
+                # sensed_power = msgdata[0]
                 t_senseB = time.time()
 
-                packet = plcp.create_packet("CCA", sensed_power)
+                packet = plcp.create_packet("CCA", signal_value)
                 plcp.send_to_mac(socket_client, packet)
                 t_senseC = time.time()
                 T_sense_USRP2 = T_sense_USRP2 + (t_senseB - t_senseA)
                 T_sense_PHY = T_sense_PHY + (t_senseC - t_senseA)
                 n_cca += 1
                 print_msg("Time elapsed on graph configuration (Carrier Sensing) = %f" % t_reconfig, self.node,
-                          self.verbose)
+                        self.verbose)
 
             elif "TAIL" == arrived_packet["HEADER"]:  # MAC requests an incoming packet from the PHY
                 header_pkt = arrived_packet["DATA"]
                 print_msg("Mac requests PHY to report a %s pkt" % header_pkt, self.node, False)
 
-                if header_pkt == "DATA" and not data.empty():  # There are Data packets?
+                if header_pkt == "DATA" and not len(data)==0:  # There are Data packets?
                     print_stat = True
                     n_data_rx += 1
                     phy_pkt = plcp.create_packet("YES", data.get())
 
-                elif header_pkt == "ACK" and not ack.empty():  # There are ACK packets?
+                elif header_pkt == "ACK" and not len(ack)==0:  # There are ACK packets?
                     print_stat = True
                     n_ack_rx += 1
                     phy_pkt = plcp.create_packet("YES", ack.get())
 
-                elif header_pkt == "RTS" and not rts.empty():  # There are RTS packets?
+                elif header_pkt == "RTS" and not len(rts)==0:  # There are RTS packets?
                     phy_pkt = plcp.create_packet("YES", rts.get())
 
-                elif header_pkt == "CTS" and not cts.empty():  # There are CTS packets?
+                elif header_pkt == "CTS" and not len(cts)==0:  # There are CTS packets?
                     phy_pkt = plcp.create_packet("YES", cts.get())
 
                 elif header_pkt == "NODE":
@@ -795,13 +823,11 @@ class Phy(threading.Thread):
         rx_client_thread = rx_client(self.options['PHYRXport'], my_mac,self.options['node'])
         rx_client_thread.start()
 
-        msgq = gr.msg_queue(1)
-
-        tb = top_block_cls(self.options, socket.gethostname(), msgq)
+        tb = top_block_cls(self.options, socket.gethostname())
         tb.start()
         tb.show()
 
-        proc_mac_thread = proc_mac_request(self.options, msgq, tb)
+        proc_mac_thread = proc_mac_request(self.options, tb)
         proc_mac_thread.start()
 
         def quitting():
@@ -809,6 +835,6 @@ class Phy(threading.Thread):
             tb.wait()
             rx_client_thread.stop()
             proc_mac_thread.stop()
+        qapp.aboutToQuit.connect(quitting)
 
-        qapp.connect(qapp, Qt.SIGNAL("aboutToQuit()"), quitting)
         qapp.exec_()
