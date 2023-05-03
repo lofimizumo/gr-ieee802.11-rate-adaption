@@ -25,6 +25,7 @@ import socket
 import sys
 import threading
 import foo
+import logging
 import ieee802_11
 import yaml
 from PyQt5 import Qt,QtWidgets
@@ -528,6 +529,8 @@ class rx_client(threading.Thread):
         self.phy_rx_server.bind((socket.gethostname(), PHYRXport))
         self.phy_rx_server.listen(1)
 
+        self.total_received_bytes = 0
+        self.start_time = time.time()
         self.running = True
 
     def run(self):
@@ -542,6 +545,7 @@ class rx_client(threading.Thread):
             if "DATA" == arrived_packet["HEADER"] or "DATA_FRAG" == arrived_packet["HEADER"]:  # DATA
                 if self.my_mac == arrived_packet["DATA"]["mac_add1"]:  # Is DATA addressed to this node?
                     data.put(arrived_packet["DATA"])
+                    self.total_received_bytes += len(arrived_packet["DATA"]["DATA"])
                 else:
                     other.put("random data")
             elif "ACK" == arrived_packet["HEADER"]:  # ACK
@@ -578,6 +582,12 @@ class rx_client(threading.Thread):
                     bcn.put(msg)
             else:
                 continue
+
+            if (time.time() - self.start_time) >= 1:  # Update throughput every 1 second
+                throughput = self.total_received_bytes / (time.time() - self.start_time)
+                logging.info(f"Throughput: {throughput} bytes/sec", self.node)
+                self.start_time = time.time()
+                self.total_received_bytes = 0
 
             if self.print_buffer:
                 # Queue size
