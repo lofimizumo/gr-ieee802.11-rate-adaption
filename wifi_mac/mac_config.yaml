@@ -8,4 +8,4 @@ BI: 1
 SIFS: 16e-6
 retx_max: 4
 RTS: false
-rate_control: aarf
+rate_control: none
